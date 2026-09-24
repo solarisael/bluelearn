@@ -226,4 +226,82 @@ describe("layoutObjectiveGraph", () => {
     expect(positions.get("g")!.x).toBe(positions.get("t")!.x);
     expect(positions.get("g")!.x).toBeGreaterThan(positions.get("a")!.x);
   });
+
+  describe("with an objective", () => {
+    const objective = (id: string): ObjectiveGraphNode => ({
+      id,
+      type: "objective",
+      title: id,
+      summary: "",
+    });
+
+    it("centres the objective island on x = 0 with a ghost island to its right, whatever the input order", () => {
+      // Ghost a -> b, objective island x -> o; one card wide each, 300 gap.
+      const nodes = [guide("a"), guide("b"), guide("x"), objective("o")];
+      const edges = [edge("a", "b"), edge("x", "o")];
+
+      for (const order of [nodes, [...nodes].reverse()]) {
+        const positions = positionsOf({ nodes: order, edges });
+        expect(positions.get("o")!.x).toBe(-100);
+        expect(positions.get("x")!.x).toBe(-100);
+        expect(positions.get("a")!.x).toBe(600 - 100);
+        expect(positions.get("b")!.y).toBe(0);
+        expect(positions.get("o")!.y).toBe(0);
+      }
+    });
+
+    it("alternates ghost islands right then left, the loose block last and outward", () => {
+      const positions = positionsOf({
+        nodes: [
+          guide("a"),
+          guide("b"),
+          guide("x"),
+          objective("o"),
+          guide("c"),
+          guide("d"),
+          targetGuide("t"),
+        ],
+        edges: [edge("a", "b"), edge("x", "o"), edge("c", "d")],
+      });
+      const x = (id: string) => positions.get(id)!.x + 100;
+
+      expect(x("o")).toBe(0);
+      expect(x("a")).toBe(600);
+      expect(x("c")).toBe(-600);
+      expect(x("t")).toBe(1200);
+      expect(["b", "o", "d", "t"].map((id) => positions.get(id)!.y)).toEqual([
+        0, 0, 0, 0,
+      ]);
+    });
+
+    it("puts the objective card in the middle slot of a three-card row", () => {
+      const positions = positionsOf({
+        nodes: [
+          targetGuide("t1"),
+          objective("o"),
+          targetGuide("t2"),
+          guide("x"),
+        ],
+        edges: ["t1", "o", "t2"].map((id) => edge("x", id)),
+      });
+      const at = (id: string) => positions.get(id)!;
+
+      expect(new Set(["t1", "o", "t2"].map((id) => at(id).y)).size).toBe(1);
+      expect(at("t1").x).toBeLessThan(at("o").x);
+      expect(at("o").x).toBe(-100);
+      expect(at("t2").x).toBeGreaterThan(at("o").x);
+    });
+  });
+
+  it("without an objective, centres the whole set rather than its first island", () => {
+    // Island g1, g2 -> h is two cards wide (600), island d -> e one (300):
+    // total 1200 from -600, so centres -300 and 450.
+    const positions = positionsOf({
+      nodes: [guide("g1"), guide("g2"), guide("h"), guide("d"), guide("e")],
+      edges: [edge("g1", "h"), edge("g2", "h"), edge("d", "e")],
+    });
+
+    expect(positions.get("h")!.x).toBe(-300 - 100);
+    expect(positions.get("e")!.x).toBe(450 - 100);
+  });
 });

@@ -24,8 +24,10 @@ const KIND_ORDER: Record<ObjectiveGraphNode["type"], number> = {
 
 // Prerequisites below dependents, matching the node handles (in at the bottom,
 // out at the top): flip both together. Each connected group of edges is an
-// island of its own rows; islands stand side by side, top rows aligned, and
-// the whole set centres on x = 0 like useGraphLayout.
+// island of its own rows; islands stand side by side, top rows aligned. The
+// objective is the picture: its island centres on x = 0 and the rest alternate
+// right, left, outward around it. Without an objective the whole set centres
+// on x = 0 like useGraphLayout.
 export function layoutObjectiveGraph(
   graph: ObjectiveGraphData,
   { nodeWidth, nodeSpacing, levelSpacing }: LayoutOptions
@@ -80,6 +82,7 @@ export function layoutObjectiveGraph(
   const byKind = [...graph.nodes].sort(
     (a, b) => KIND_ORDER[a.type] - KIND_ORDER[b.type]
   );
+  const objectiveId = graph.nodes.find((n) => n.type === "objective")?.id;
 
   const blocks = rowSets.map(({ ids, rowById, rowCount }) => {
     const members = new Set(ids);
@@ -89,23 +92,53 @@ export function layoutObjectiveGraph(
       const row = rowById.get(node.id)!;
       idsByRow.set(row, [...(idsByRow.get(row) ?? []), node.id]);
     }
+    const holdsObjective =
+      objectiveId !== undefined && members.has(objectiveId);
+    if (holdsObjective) {
+      // Middle slot of its row; an even row takes the left of the two middles,
+      // which keeps a lone objective left of a lone target as KIND_ORDER has it.
+      const row = idsByRow.get(rowById.get(objectiveId)!)!;
+      const others = row.filter((id) => id !== objectiveId);
+      others.splice(Math.floor(others.length / 2), 0, objectiveId);
+      idsByRow.set(rowById.get(objectiveId)!, others);
+    }
     const width =
       Math.max(...[...idsByRow.values()].map((row) => row.length)) *
       nodeSpacing;
-    return { idsByRow, rowCount, width };
+    return { idsByRow, rowCount, width, centerX: 0, holdsObjective };
   });
 
-  // One nodeSpacing between islands, beyond their own widths.
-  const totalWidth =
-    blocks.reduce((sum, block) => sum + block.width, 0) +
-    Math.max(0, blocks.length - 1) * nodeSpacing;
-  let blockLeft = -totalWidth / 2;
+  const centre = blocks.find((block) => block.holdsObjective);
+  if (centre) {
+    // One nodeSpacing beyond the last block on each side; first goes right.
+    let rightEdge = centre.width / 2;
+    let leftEdge = -centre.width / 2;
+    let goRight = true;
+    for (const block of blocks) {
+      if (block === centre) continue;
+      if (goRight) {
+        block.centerX = rightEdge + nodeSpacing + block.width / 2;
+        rightEdge += nodeSpacing + block.width;
+      } else {
+        block.centerX = leftEdge - nodeSpacing - block.width / 2;
+        leftEdge -= nodeSpacing + block.width;
+      }
+      goRight = !goRight;
+    }
+  } else {
+    // One nodeSpacing between islands, beyond their own widths.
+    const totalWidth =
+      blocks.reduce((sum, block) => sum + block.width, 0) +
+      Math.max(0, blocks.length - 1) * nodeSpacing;
+    let blockLeft = -totalWidth / 2;
+    for (const block of blocks) {
+      block.centerX = blockLeft + block.width / 2;
+      blockLeft += block.width + nodeSpacing;
+    }
+  }
 
-  return blocks.flatMap(({ idsByRow, rowCount, width }) => {
-    const centerX = blockLeft + width / 2;
-    blockLeft += width + nodeSpacing;
-
-    return [...idsByRow].flatMap(([row, ids]) => {
+  return blocks.flatMap(({ idsByRow, rowCount, centerX }) =>
+    [...idsByRow].flatMap(([row, ids]) => {
       const startX = centerX - (ids.length * nodeSpacing) / 2;
 
       return ids.map((id, index) => {
@@ -119,8 +152,8 @@ export function layoutObjectiveGraph(
           },
         };
       });
-    });
-  });
+    })
+  );
 }
 
 // Connected components of the edges, undirected, over edges whose ends are
