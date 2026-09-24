@@ -219,15 +219,22 @@ const Stepper = {
   Content: ({ children }: { children: ReactNode }) => <div>{children}</div>,
 };
 
+const OBJECTIVE_TITLE = "Write a parser";
+const OBJECTIVE_SUMMARY = "From tokens to a tree";
+
 function DesignWithState({
   initial,
   onTargetsChange,
+  objectiveTitle = OBJECTIVE_TITLE,
+  onWrite,
 }: {
   initial: ObjectiveGraphData;
   onTargetsChange: (change: {
     added?: Array<string>;
     removed?: Array<string>;
   }) => void;
+  objectiveTitle?: string;
+  onWrite?: () => void;
 }) {
   const [graph, setGraph] = useState(initial);
 
@@ -236,8 +243,13 @@ function DesignWithState({
       Stepper={Stepper}
       type="objective"
       objectiveGraph={graph}
-      setObjectiveGraph={setGraph}
+      setObjectiveGraph={(update) => {
+        onWrite?.();
+        setGraph(update);
+      }}
       onTargetsChange={onTargetsChange}
+      objectiveTitle={objectiveTitle}
+      objectiveSummary={OBJECTIVE_SUMMARY}
     />
   );
 }
@@ -250,9 +262,23 @@ function renderDesign(graph: ObjectiveGraphData) {
       Stepper={Stepper}
       type="objective"
       objectiveGraph={graph}
+      objectiveTitle={OBJECTIVE_TITLE}
+      objectiveSummary={OBJECTIVE_SUMMARY}
     />
   );
 }
+
+// The Details card, already on the canvas as a saved draft would hold it.
+const OBJECTIVE: ObjectiveGraphNode = {
+  id: "obj",
+  type: "objective",
+  title: OBJECTIVE_TITLE,
+  summary: OBJECTIVE_SUMMARY,
+};
+
+const objectiveCardId = () =>
+  screen.getByText(OBJECTIVE_TITLE).closest<HTMLElement>("[data-id]")!.dataset
+    .id!;
 
 const LOOPS: ObjectiveGraphNode = {
   id: "n1",
@@ -360,7 +386,10 @@ describe("ObjectiveDesign", () => {
       />
     );
     fireEvent.click(screen.getByRole("button", { name: "Add target" }));
-    fireEvent.click(screen.getByRole("button", { name: /^delete /i }));
+    const targetId = screen
+      .getByText("Recursion")
+      .closest<HTMLElement>("[data-id]")!.dataset.id;
+    fireEvent.click(screen.getByRole("button", { name: `Delete ${targetId}` }));
 
     await act(async () => {
       resolveWalkthrough({
@@ -589,19 +618,22 @@ describe("ObjectiveDesign", () => {
 
   it("dims only what the hovered node neither needs nor leads to, until the pointer leaves", () => {
     renderDesign({
-      nodes: ["a", "b", "c", "d"].map(guide),
+      nodes: [...["a", "b", "c", "d"].map(guide), OBJECTIVE],
       edges: [
         { id: "a-b", source: "a", target: "b" },
         { id: "b-c", source: "b", target: "c" },
+        { id: "c-obj", source: "c", target: "obj" },
+        { id: "d-obj", source: "d", target: "obj" },
       ],
     });
 
     fireEvent.mouseEnter(screen.getByTestId("node-b"));
-    expect(["a", "b", "c", "d"].map(isDimmed)).toEqual([
+    expect(["a", "b", "c", "d", "obj"].map(isDimmed)).toEqual([
       false,
       false,
       false,
       true,
+      false,
     ]);
 
     fireEvent.mouseLeave(screen.getByTestId("node-b"));
@@ -612,8 +644,11 @@ describe("ObjectiveDesign", () => {
     render(
       <DesignWithState
         initial={{
-          nodes: ["a", "b"].map(guide),
-          edges: [{ id: "a-b", source: "a", target: "b" }],
+          nodes: [...["a", "b"].map(guide), OBJECTIVE],
+          edges: [
+            { id: "a-b", source: "a", target: "b" },
+            { id: "a-obj", source: "a", target: "obj" },
+          ],
         }}
         onTargetsChange={() => {}}
       />
@@ -623,6 +658,91 @@ describe("ObjectiveDesign", () => {
     fireEvent.click(screen.getByRole("button", { name: "Delete b" }));
 
     expect(isDimmed("a")).toBe(false);
+  });
+
+  it("adds one objective card from Details to a graph saved before it existed", () => {
+    render(
+      <DesignWithState
+        initial={{ nodes: [LOOPS], edges: [] }}
+        onTargetsChange={() => {}}
+      />
+    );
+
+    expect(screen.getByText(OBJECTIVE_TITLE)).toBeTruthy();
+    expect(screen.getByText(OBJECTIVE_SUMMARY)).toBeTruthy();
+    expect(screen.getAllByText("Objective")).toHaveLength(1);
+    expect(screen.getByText("Loops")).toBeTruthy();
+  });
+
+  it("follows a Details change with one write, and writes nothing while it matches", () => {
+    const write = vi.fn();
+    const { rerender } = render(
+      <DesignWithState
+        initial={{ nodes: [OBJECTIVE], edges: [] }}
+        onTargetsChange={() => {}}
+        onWrite={write}
+      />
+    );
+    expect(write).not.toHaveBeenCalled();
+
+    rerender(
+      <DesignWithState
+        initial={{ nodes: [OBJECTIVE], edges: [] }}
+        onTargetsChange={() => {}}
+        onWrite={write}
+        objectiveTitle="Write a lexer"
+      />
+    );
+
+    expect(write).toHaveBeenCalledTimes(1);
+    expect(screen.getByText("Write a lexer")).toBeTruthy();
+    expect(screen.queryByText(OBJECTIVE_TITLE)).toBeNull();
+  });
+
+  it("keeps the card and its edge through a delete that includes it", () => {
+    const onTargetsChange = vi.fn();
+    render(
+      <DesignWithState
+        initial={{
+          nodes: [OBJECTIVE, LOOPS],
+          edges: [
+            { id: drawnEdgeId("n1", "obj"), source: "n1", target: "obj" },
+          ],
+        }}
+        onTargetsChange={onTargetsChange}
+      />
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: `Delete ${objectiveCardId()}` })
+    );
+
+    expect(screen.getByText(OBJECTIVE_TITLE)).toBeTruthy();
+    expect(edgesDrawn()).toBe("n1>obj");
+    expect(onTargetsChange).not.toHaveBeenCalled();
+  });
+
+  it("dims a card with no path to the objective until an edge out of the card reaches it", () => {
+    render(
+      <DesignWithState
+        initial={{
+          nodes: [OBJECTIVE, LOOPS, RECURSION_GUIDE],
+          edges: [
+            { id: drawnEdgeId("n1", "obj"), source: "n1", target: "obj" },
+          ],
+        }}
+        onTargetsChange={() => {}}
+      />
+    );
+
+    expect(["obj", "n1", "n2"].map(isDimmed)).toEqual([false, false, true]);
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "From obj top dot to n2 dot" })
+    );
+
+    expect(edgesDrawn()).toBe("n1>obj obj>n2");
+    expect(isDimmed("n2")).toBe(false);
   });
 });
 

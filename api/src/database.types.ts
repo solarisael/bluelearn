@@ -544,6 +544,7 @@ export type Database = {
           id: string
           is_featured: boolean
           is_included: boolean
+          is_objective: boolean
           is_target: boolean
           note: string | null
           request_id: string | null
@@ -558,6 +559,7 @@ export type Database = {
           id?: string
           is_featured?: boolean
           is_included?: boolean
+          is_objective?: boolean
           is_target?: boolean
           note?: string | null
           request_id?: string | null
@@ -572,6 +574,7 @@ export type Database = {
           id?: string
           is_featured?: boolean
           is_included?: boolean
+          is_objective?: boolean
           is_target?: boolean
           note?: string | null
           request_id?: string | null

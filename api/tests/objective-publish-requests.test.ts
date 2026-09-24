@@ -18,6 +18,7 @@ type Snapshot = {
     summary: string | null;
     request_id: string | null;
   }>;
+  objective_node_id: string | null;
   drawn_edges: Array<{ from_node_id: string; to_node_id: string }>;
 };
 
@@ -133,6 +134,36 @@ async function draftWithGuideEdge() {
   return { from, to, graph };
 }
 
+// Prerequisite into the objective, the objective into the goal, and a request
+// into the objective: every edge kind the card can hold.
+async function draftWithObjective() {
+  const prereq = await createPublishedGuide();
+  const goal = await createPublishedGuide();
+  const prereqId = crypto.randomUUID();
+  const goalId = crypto.randomUUID();
+  const objectiveId = crypto.randomUUID();
+  const requestNodeId = crypto.randomUUID();
+  const draft = await drawnDraft(goal.base.id, {
+    nodes: [
+      { id: prereqId, guide_base_id: prereq.base.id },
+      { id: goalId, guide_base_id: goal.base.id },
+      { id: objectiveId, kind: "objective" },
+      { id: requestNodeId, ...request },
+    ],
+    edges: [
+      { from_node_id: prereqId, to_node_id: objectiveId },
+      { from_node_id: objectiveId, to_node_id: goalId },
+      { from_node_id: requestNodeId, to_node_id: objectiveId },
+    ],
+  });
+  return { ...draft, prereq, goal, requestNodeId };
+}
+
+const touching = (snapshot: Snapshot, id: string | null) =>
+  snapshot.drawn_edges.filter(
+    (e) => e.from_node_id === id || e.to_node_id === id
+  );
+
 describe("POST /objective-revisions/{id}/publish request nodes", () => {
   it("turns a request node into an open request on the objective", async () => {
     const { curator, objective, revision, requestNodeId } =
@@ -219,6 +250,32 @@ describe("POST /objective-revisions/{id}/publish request nodes", () => {
     expect((await publish(revision.id, curator.token)).status).toBe(200);
     expect(await statusOf(revision.id)).toBe("published");
   });
+
+  it("opens no request for the objective node and writes no guide edge through it", async () => {
+    const { curator, objective, revision, prereq, requestNodeId } =
+      await draftWithObjective();
+
+    const res = await publish(revision.id, curator.token);
+    expect(res.status).toBe(200);
+
+    const { data: requests } = await admin
+      .from("requests")
+      .select("id, title")
+      .eq("objective_id", objective.id)
+      .throwOnError();
+    expect(requests.map((r) => r.title)).toEqual([request.title]);
+    expect(await edgesFrom(prereq.base.id)).toEqual([]);
+
+    // the resolved guide's other end is the objective, which names no guide
+    const requestId = await requestIdOf(
+      revision.id,
+      requestNodeId,
+      curator.token
+    );
+    const resolved = await createPublishedGuide();
+    await resolveRequest(requestId, resolved.base.id);
+    expect(await edgesFrom(resolved.base.id)).toEqual([]);
+  });
 });
 
 describe("POST /objective-revisions/{id}/rollback request nodes", () => {
@@ -246,6 +303,20 @@ describe("POST /objective-revisions/{id}/rollback request nodes", () => {
     expect(snapshot.drawn_edges).toEqual([
       { from_node_id: requestNode?.id, to_node_id: goalNode?.id },
     ]);
+  });
+
+  it("keeps the objective node and its drawn edges under a fresh id", async () => {
+    const { curator, revision } = await draftWithObjective();
+    expect((await publish(revision.id, curator.token)).status).toBe(200);
+    const published = await snapshotOf(revision.id, curator.token);
+
+    const draftId = await rollback(revision.id, curator.token);
+
+    const snapshot = await snapshotOf(draftId, curator.token);
+    expect(snapshot.objective_node_id).toEqual(expect.any(String));
+    expect(snapshot.objective_node_id).not.toBe(published.objective_node_id);
+    expect(touching(snapshot, snapshot.objective_node_id)).toHaveLength(3);
+    expect(touching(published, published.objective_node_id)).toHaveLength(3);
   });
 });
 

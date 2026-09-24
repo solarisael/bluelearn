@@ -44,6 +44,7 @@ import {
   updateObjectiveRevision,
 } from "@/lib/api/objectiveRevisions";
 import {
+  adoptNodeId,
   drawnEdgeId,
   graphToApi,
   guideEdgeId,
@@ -122,10 +123,21 @@ const createObjectiveContData = (): ObjectiveContribution => ({
 type ObjectiveRevisionData = Awaited<ReturnType<typeof getObjectiveRevision>>;
 
 const objectiveGraphFromSnapshot = (
-  snapshot: ObjectiveRevisionData["snapshot"]
+  snapshot: ObjectiveRevisionData["snapshot"],
+  revision: ObjectiveRevisionData["revision"]
 ): ObjectiveGraphData => {
   const nodeIdByBaseId = new Map<string, string>();
   const nodes: Array<ObjectiveGraphNode> = [];
+
+  // the stored objective row keeps its id, so drawn edges naming it still land
+  if (snapshot.objective_node_id !== null) {
+    nodes.push({
+      id: snapshot.objective_node_id,
+      type: "objective",
+      title: revision.title ?? "",
+      summary: revision.summary ?? "",
+    });
+  }
 
   for (const n of snapshot.nodes) {
     if (n.guide_base_id === null) {
@@ -201,7 +213,7 @@ const objectiveDataFromRevision = (
       ];
     }),
     subjects: data.subjects.map((s) => s.id),
-    graph: objectiveGraphFromSnapshot(data.snapshot),
+    graph: objectiveGraphFromSnapshot(data.snapshot, data.revision),
   };
 };
 
@@ -928,14 +940,25 @@ function Inner({
     if (type === "objective") {
       const target_ids = objectiveContData.targets.map(baseIdForSlug);
 
-      // an empty graph would delete the targets
-      const graphField =
-        objectiveContData.graph.nodes.length > 0
-          ? { graph: graphToApi(objectiveContData.graph) }
-          : {};
+      const sentGraph = objectiveContData.graph;
+      const graph = graphToApi(sentGraph);
+      const graphField = graph ? { graph } : {};
+
+      // State change: the card's placeholder id becomes the id the server
+      // stored the objective under, in nodes and edges alike. Edits made while
+      // the save was in flight are renamed too.
+      const adoptObjectiveNodeId = (storedId: string | null | undefined) => {
+        const card = sentGraph.nodes.find((n) => n.type === "objective");
+        if (!card || !storedId || card.id === storedId) return;
+
+        setObjectiveContData((prev) => ({
+          ...prev,
+          graph: adoptNodeId(prev.graph, card.id, storedId),
+        }));
+      };
 
       if (revisionId) {
-        await updateObjectiveRevision(revisionId, {
+        const saved = await updateObjectiveRevision(revisionId, {
           title: objectiveContData.title || undefined,
           summary: objectiveContData.summary || undefined,
           change_summary: objectiveContData.changeSummary || null,
@@ -943,6 +966,7 @@ function Inner({
           targets: objectiveTargets(),
           ...graphField,
         });
+        adoptObjectiveNodeId(saved.objective_node_id);
 
         return revisionId;
       }
@@ -951,7 +975,7 @@ function Inner({
         if (!creatingRef.current) {
           creatingRef.current = createObjectiveRevision(editSlug)
             .then(async (id) => {
-              await updateObjectiveRevision(id, {
+              const saved = await updateObjectiveRevision(id, {
                 title: objectiveContData.title || undefined,
                 summary: objectiveContData.summary || undefined,
                 change_summary: objectiveContData.changeSummary || null,
@@ -959,6 +983,7 @@ function Inner({
                 targets: objectiveTargets(),
                 ...graphField,
               });
+              adoptObjectiveNodeId(saved.objective_node_id);
 
               setRevisionId(id);
 
@@ -980,10 +1005,11 @@ function Inner({
           tags: objectiveContData.subjects,
         })
           .then(async (id) => {
-            await updateObjectiveRevision(id, {
+            const saved = await updateObjectiveRevision(id, {
               targets: objectiveTargets(),
               ...graphField,
             });
+            adoptObjectiveNodeId(saved.objective_node_id);
             setRevisionId(id);
             return id;
           })
@@ -1460,6 +1486,8 @@ function Inner({
             }))
           }
           onTargetsChange={changeObjectiveTargets}
+          objectiveTitle={objectiveContData.title}
+          objectiveSummary={objectiveContData.summary}
         />
 
         <OrderObjectiveGuides

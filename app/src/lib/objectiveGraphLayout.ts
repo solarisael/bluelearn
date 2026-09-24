@@ -18,7 +18,8 @@ type NodePosition = {
 const KIND_ORDER: Record<ObjectiveGraphNode["type"], number> = {
   guide: 0,
   guide_request: 1,
-  target: 2,
+  objective: 2,
+  target: 3,
 };
 
 // Prerequisites below dependents, matching the node handles (in at the bottom,
@@ -47,13 +48,14 @@ export function layoutObjectiveGraph(
   });
 
   // Nodes with no edge fall back by kind in one last island: an existing guide
-  // to the bottom row, a target to the top, a request just below the top when
-  // a target holds it. Its height matches the deepest island, so rows line up.
+  // to the bottom row, a target or the objective to the top, a request just
+  // below the top when a target holds it. Its height matches the deepest
+  // island, so rows line up.
   const loose = (type: ObjectiveGraphNode["type"]) =>
     graph.nodes.filter((n) => n.type === type && !inIsland.has(n.id));
   const looseGuides = loose("guide");
   const looseRequests = loose("guide_request");
-  const looseTargets = loose("target");
+  const looseTargets = [...loose("objective"), ...loose("target")];
   const looseIds = graph.nodes
     .filter((n) => !inIsland.has(n.id))
     .map((n) => n.id);

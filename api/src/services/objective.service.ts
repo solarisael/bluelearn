@@ -149,12 +149,14 @@ async function loadObjectiveCards(supabase: DB, revisionIds: string[]) {
   if (revisionIds.length === 0) return cards;
 
   const [nodesRes, ordersRes] = await Promise.all([
+    // the objective's own row is no guide to count or read
     selectInBatches(revisionIds, (batch) =>
       supabase
         .from("objective_revision_nodes")
         .select(
           "revision_id, id, guide_base_id, guide_id, is_featured, is_included"
         )
+        .eq("is_objective", false)
         .in("revision_id", batch)
     ),
     selectInBatches(revisionIds, (batch) =>

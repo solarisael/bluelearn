@@ -64,6 +64,14 @@ export const objectiveGraphNodeSchema = z.discriminatedUnion("type", [
     title: z.string(),
     summary: z.string(),
   }),
+  // The objective from Objective Details, drawn as one card. Its id is a local
+  // placeholder until the first save, then the server's objective node id.
+  z.object({
+    id: z.string(),
+    type: z.literal("objective"),
+    title: z.string(),
+    summary: z.string(),
+  }),
 ]);
 
 export const objectiveGraphEdgeSchema = z.object({

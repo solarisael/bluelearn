@@ -26,7 +26,9 @@ export const objectiveTargetSchema = z.object({
 
 // The drawn graph, sent whole. Node ids are minted by the client so an edge in
 // the same body can name a node the server has not stored yet. A guide node is
-// matched by its guide base; a request node is kept under its own id.
+// matched by its guide base; a request node is kept under its own id. The
+// objective node is the revision's one objective row: the server keeps the id
+// it already holds or mints one, and reports it back as objective_node_id.
 export const objectiveGraphGuideNodeSchema = z.object({
   id: z.uuid(),
   guide_base_id: z.uuid(),
@@ -38,9 +40,15 @@ export const objectiveGraphRequestNodeSchema = z.object({
   summary: objectiveSummarySchema,
 });
 
+export const objectiveGraphObjectiveNodeSchema = z.object({
+  id: z.uuid(),
+  kind: z.literal("objective"),
+});
+
 export const objectiveGraphNodeSchema = z.union([
   objectiveGraphGuideNodeSchema,
   objectiveGraphRequestNodeSchema,
+  objectiveGraphObjectiveNodeSchema,
 ]);
 
 export const objectiveGraphEdgeSchema = z.object({

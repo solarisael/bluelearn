@@ -18,6 +18,7 @@ type Snapshot = {
     summary: string | null;
     request_id: string | null;
   }>;
+  objective_node_id: string | null;
   drawn_edges: Array<{ from_node_id: string; to_node_id: string }>;
 };
 
@@ -245,5 +246,155 @@ describe("PATCH /objective-revisions/{id} graph", () => {
     await grantRole(author.userId, "curator");
     const accepted = await patch(revision.id, author.token, body);
     expect(accepted.status).toBe(200);
+  });
+});
+
+describe("PATCH /objective-revisions/{id} graph objective node", () => {
+  async function objectiveRows(revisionId: string) {
+    const { data } = await admin
+      .from("objective_revision_nodes")
+      .select("id")
+      .eq("revision_id", revisionId)
+      .eq("is_objective", true)
+      .throwOnError();
+    return data.map((r) => r.id);
+  }
+
+  it("stores edges into and out of the objective under one server id, kept across saves", async () => {
+    const { curator, revision, goal, goalNode } = await draftWithTarget();
+    const goalClientId = crypto.randomUUID();
+    const requestId = crypto.randomUUID();
+    const graph = (objectiveClientId: string) => ({
+      graph: {
+        nodes: [
+          { id: goalClientId, guide_base_id: goal.base.id },
+          { id: objectiveClientId, kind: "objective" },
+          { id: requestId, ...request },
+        ],
+        edges: [
+          { from_node_id: goalClientId, to_node_id: objectiveClientId },
+          { from_node_id: objectiveClientId, to_node_id: requestId },
+        ],
+      },
+    });
+
+    const placeholder = crypto.randomUUID();
+    const first = await patch(revision.id, curator.token, graph(placeholder));
+    expect(first.status).toBe(200);
+    await expectToMatchSpec(first, "PATCH", "/objective-revisions/{id}");
+    const { objective_node_id: storedId } = (await first.json()) as {
+      objective_node_id: string;
+    };
+    expect(storedId).not.toBe(placeholder);
+
+    const snapshot = await snapshotOf(revision.id, curator.token);
+    expect(snapshot.objective_node_id).toBe(storedId);
+    expect(snapshot.nodes.map((n) => n.id)).not.toContain(storedId);
+    expect(snapshot.drawn_edges).toEqual(
+      expect.arrayContaining([
+        { from_node_id: goalNode.id, to_node_id: storedId },
+        { from_node_id: storedId, to_node_id: requestId },
+      ])
+    );
+    expect(snapshot.drawn_edges).toHaveLength(2);
+
+    // a second client name for it, as after a reload from local storage
+    const second = await patch(
+      revision.id,
+      curator.token,
+      graph(crypto.randomUUID())
+    );
+    expect(second.status).toBe(200);
+    expect(
+      ((await second.json()) as { objective_node_id: string }).objective_node_id
+    ).toBe(storedId);
+    expect(await objectiveRows(revision.id)).toEqual([storedId]);
+
+    // a body without it keeps the row and drops only its edges
+    const without = await patch(revision.id, curator.token, {
+      graph: {
+        nodes: [{ id: goalClientId, guide_base_id: goal.base.id }],
+        edges: [],
+      },
+    });
+    expect(without.status).toBe(200);
+    const after = await snapshotOf(revision.id, curator.token);
+    expect(after.objective_node_id).toBe(storedId);
+    expect(after.drawn_edges).toEqual([]);
+  });
+
+  it("400s an edge from the objective to an id outside the graph, and a second objective node", async () => {
+    const { curator, revision, goal } = await draftWithTarget();
+    const goalClientId = crypto.randomUUID();
+    const objectiveId = crypto.randomUUID();
+    const nodes = [
+      { id: goalClientId, guide_base_id: goal.base.id },
+      { id: objectiveId, kind: "objective" },
+    ];
+
+    const dangling = await patch(revision.id, curator.token, {
+      graph: {
+        nodes,
+        edges: [{ from_node_id: objectiveId, to_node_id: crypto.randomUUID() }],
+      },
+    });
+    expect(dangling.status).toBe(400);
+
+    const doubled = await patch(revision.id, curator.token, {
+      graph: {
+        nodes: [...nodes, { id: crypto.randomUUID(), kind: "objective" }],
+        edges: [],
+      },
+    });
+    expect(doubled.status).toBe(400);
+    expect(await objectiveRows(revision.id)).toEqual([]);
+
+    const accepted = await patch(revision.id, curator.token, {
+      graph: {
+        nodes,
+        edges: [{ from_node_id: goalClientId, to_node_id: objectiveId }],
+      },
+    });
+    expect(accepted.status).toBe(200);
+    expect(await objectiveRows(revision.id)).toHaveLength(1);
+  });
+});
+
+describe("project_objective_edges beside the objective row", () => {
+  it("still bridges across a guide the revision skips", async () => {
+    const { revision } = await curatorDraft();
+    const [before, skipped, after] = await Promise.all([
+      createPublishedGuide(),
+      createPublishedGuide(),
+      createPublishedGuide(),
+    ]);
+    await createPrerequisite(before.base.id, skipped.base.id);
+    await createPrerequisite(skipped.base.id, after.base.id);
+    await admin
+      .from("objective_revision_nodes")
+      .insert(
+        [
+          {
+            revision_id: revision.id,
+            guide_base_id: before.base.id,
+            guide_id: before.guide.id,
+          },
+          {
+            revision_id: revision.id,
+            guide_base_id: after.base.id,
+            guide_id: after.guide.id,
+          },
+          { revision_id: revision.id, is_objective: true },
+        ],
+        { defaultToNull: false }
+      )
+      .throwOnError();
+
+    const { data } = await admin
+      .rpc("project_objective_edges", { p_revision_id: revision.id })
+      .throwOnError();
+    expect(data).toEqual([
+      { from_guide_base_id: before.base.id, to_guide_base_id: after.base.id },
+    ]);
   });
 });

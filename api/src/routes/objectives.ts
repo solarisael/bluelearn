@@ -262,7 +262,8 @@ export const objectiveRevisionsRouter = new Hono<HonoEnv>()
   )
 
   // Overwrites a draft's metadata, tags, and/or target curation. Returns
-  // { revision, subjects }; 404 if not an editable draft.
+  // { revision, subjects }, plus objective_node_id when a graph was sent; 404
+  // if not an editable draft.
   .patch(
     "/:id",
     describeRoute({
@@ -285,13 +286,13 @@ export const objectiveRevisionsRouter = new Hono<HonoEnv>()
     validate("param", idParamSchema),
     validate("json", updateObjectiveRevisionSchema),
     async (c) => {
-      const { revision, subjects } = await updateObjectiveRevision(
+      const result = await updateObjectiveRevision(
         c.get("supabase"),
         c.get("user").id,
         c.req.valid("param").id,
         c.req.valid("json")
       );
-      return c.json({ revision, subjects });
+      return c.json(result);
     }
   )
 

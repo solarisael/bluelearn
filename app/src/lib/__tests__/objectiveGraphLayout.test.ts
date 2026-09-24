@@ -75,6 +75,22 @@ describe("layoutObjectiveGraph", () => {
     }
   });
 
+  it("places a loose objective card on the top row, left of a loose target", () => {
+    const positions = positionsOf({
+      nodes: [
+        targetGuide("t"),
+        guide("g"),
+        { id: "o", type: "objective", title: "o", summary: "" },
+      ],
+      edges: [],
+    });
+
+    expect(positions.get("o")!.y).toBe(0);
+    expect(positions.get("t")!.y).toBe(0);
+    expect(positions.get("o")!.x).toBeLessThan(positions.get("t")!.x);
+    expect(positions.get("g")!.y).toBeGreaterThan(0);
+  });
+
   it("moves a node out of its fallback row once an edge places it", () => {
     const nodes = [guide("g"), request("r"), targetGuide("t")];
     const loose = positionsOf({ nodes, edges: [] });

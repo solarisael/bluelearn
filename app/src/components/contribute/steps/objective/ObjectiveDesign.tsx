@@ -41,8 +41,11 @@ import {
   addRequestNode,
   addWalkthrough,
   connectNodes,
+  connectedToObjective,
   edgesCutByConnecting,
+  ensureObjectiveNode,
   isDrawnEdge,
+  isGuideNode,
   removeEdges,
   removeNodes,
 } from "@/lib/objectiveGraphEdits";
@@ -51,6 +54,7 @@ import { useTheme } from "@/lib/themeProvider";
 import { StepperActionHeader } from "@/components/contribute/StepperActionHeader";
 import {
   OBJECTIVE_NODE_WIDTH,
+  ObjectiveCardNode,
   ObjectiveGuideNode,
   ObjectiveRequestNode,
 } from "@/components/contribute/steps/objective/ObjectiveGraphNode";
@@ -58,6 +62,7 @@ import {
 const nodeTypes = {
   objectiveGuide: ObjectiveGuideNode,
   objectiveRequest: ObjectiveRequestNode,
+  objectiveCard: ObjectiveCardNode,
 };
 
 const edgeTypes = { drawn: DrawnEdge };
@@ -90,6 +95,8 @@ type PropTypes = {
   objectiveGraph: ObjectiveGraphData;
   setObjectiveGraph?: Dispatch<SetStateAction<ObjectiveGraphData>>;
   onTargetsChange?: (change: TargetsChange) => void;
+  objectiveTitle: string;
+  objectiveSummary: string;
 };
 
 export const ObjectiveDesign = ({
@@ -102,25 +109,45 @@ export const ObjectiveDesign = ({
   objectiveGraph,
   setObjectiveGraph,
   onTargetsChange,
+  objectiveTitle,
+  objectiveSummary,
 }: PropTypes) => {
+  // ensureObjectiveNode hands back the same graph once the card matches, so
+  // this writes once per Details change or graph that lost its card, then
+  // settles.
+  useEffect(() => {
+    const ensured = ensureObjectiveNode(
+      objectiveGraph,
+      objectiveTitle,
+      objectiveSummary
+    );
+    if (ensured === objectiveGraph) return;
+
+    setObjectiveGraph?.((graph) =>
+      ensureObjectiveNode(graph, objectiveTitle, objectiveSummary)
+    );
+  }, [objectiveTitle, objectiveSummary, objectiveGraph, setObjectiveGraph]);
+
   const guideBaseIdsOnCanvas = objectiveGraph.nodes.flatMap((n) =>
-    n.type === "guide_request" ? [] : [n.guideBaseId]
+    isGuideNode(n) ? [n.guideBaseId] : []
   );
 
   const addGuideNodes = (nodes: Array<ObjectiveGraphNode>) => {
     setObjectiveGraph?.((graph) =>
-      nodes.reduce(
-        (next, node) =>
-          node.type === "guide_request"
-            ? addRequestNode(next, { title: node.title, summary: node.summary })
-            : addGuideNode(next, {
-                type: node.type,
-                guideBaseId: node.guideBaseId,
-                guideSlug: node.guideSlug,
-                title: node.title,
-              }),
-        graph
-      )
+      nodes.reduce((next, node) => {
+        if (node.type === "guide_request")
+          return addRequestNode(next, {
+            title: node.title,
+            summary: node.summary,
+          });
+        if (!isGuideNode(node)) return next;
+        return addGuideNode(next, {
+          type: node.type,
+          guideBaseId: node.guideBaseId,
+          guideSlug: node.guideSlug,
+          title: node.title,
+        });
+      }, graph)
     );
 
     const targets = nodes.flatMap((n) => (n.type === "target" ? [n] : []));
@@ -215,6 +242,8 @@ const ObjectiveGraph = ({
 
   // Widths and dimming match the walkthrough graph (lib/useGraphLayout.ts);
   // only the design canvas tells a guide's prerequisites from its follow-ups.
+  // A card with no path to the objective is unfinished and stays dimmed,
+  // hovered or not.
   useEffect(() => {
     const { upstream, downstream } = hoveredNodeId
       ? upstreamAndDownstream(graph.edges, hoveredNodeId)
@@ -223,13 +252,15 @@ const ObjectiveGraph = ({
       id === hoveredNodeId || upstream.has(id);
     const onFollowUpSide = (id: string) =>
       id === hoveredNodeId || downstream.has(id);
+    const reachesObjective = connectedToObjective(graph);
 
     setNodes((nds) =>
       nds.map((n) => {
         const isDimmed =
-          hoveredNodeId !== null &&
-          !onPrerequisiteSide(n.id) &&
-          !onFollowUpSide(n.id);
+          !reachesObjective.has(n.id) ||
+          (hoveredNodeId !== null &&
+            !onPrerequisiteSide(n.id) &&
+            !onFollowUpSide(n.id));
         const isHovered = n.id === hoveredNodeId;
         return n.data.isDimmed === isDimmed && n.data.isHovered === isHovered
           ? n
@@ -356,15 +387,18 @@ const ObjectiveGraph = ({
       setHoveredNodeId(null);
   };
 
+  const onlyObjective = !graph.nodes.some((n) => n.type !== "objective");
+
   return (
     // xyflow sizes itself with height: 100%, which needs a definite height here;
     // a flex-1 item resolves that percentage to 0.
-    <div className="h-[calc(100vh-250px)] min-h-[600px] overflow-hidden rounded-lg border">
-      {graph.nodes.length === 0 ? (
-        <div className="flex h-full items-center justify-center p-6 text-center text-sm text-muted-foreground">
+    <div className="relative h-[calc(100vh-250px)] min-h-[600px] overflow-hidden rounded-lg border">
+      {onlyObjective && (
+        <div className="pointer-events-none absolute inset-x-0 top-6 z-10 p-6 text-center text-sm text-muted-foreground">
           No guides yet. Add a guide to start the design.
         </div>
-      ) : (
+      )}
+      {graph.nodes.length > 0 && (
         <ReactFlow
           nodes={nodes}
           edges={edges}
@@ -410,34 +444,43 @@ function toFlowNodes(
   );
   const positionOf = (id: string) => positionById.get(id)!;
 
-  return graph.nodes.map((node) =>
-    node.type === "guide_request"
-      ? {
-          id: node.id,
-          type: "objectiveRequest",
-          className: GLIDE_TO_SLOT,
-          position: positionOf(node.id),
-          data: {
-            title: node.title,
-            summary: node.summary,
-            isTarget: false,
-            isHovered: false,
-            isDimmed: false,
-          },
-        }
-      : {
-          id: node.id,
-          type: "objectiveGuide",
-          className: GLIDE_TO_SLOT,
-          position: positionOf(node.id),
-          data: {
-            title: node.title,
-            isTarget: node.type === "target",
-            isHovered: false,
-            isDimmed: false,
-          },
-        }
-  );
+  return graph.nodes.map((node) => {
+    const base = {
+      id: node.id,
+      className: GLIDE_TO_SLOT,
+      position: positionOf(node.id),
+    };
+    const shown = { isHovered: false, isDimmed: false };
+
+    if (node.type === "objective")
+      return {
+        ...base,
+        type: "objectiveCard",
+        deletable: false,
+        data: {
+          title: node.title,
+          summary: node.summary,
+          isTarget: false,
+          ...shown,
+        },
+      };
+    if (node.type === "guide_request")
+      return {
+        ...base,
+        type: "objectiveRequest",
+        data: {
+          title: node.title,
+          summary: node.summary,
+          isTarget: false,
+          ...shown,
+        },
+      };
+    return {
+      ...base,
+      type: "objectiveGuide",
+      data: { title: node.title, isTarget: node.type === "target", ...shown },
+    };
+  });
 }
 
 function toFlowEdges(graph: ObjectiveGraphData): Array<Edge> {

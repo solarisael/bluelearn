@@ -35,7 +35,7 @@ export async function getRevisionSnapshot(
 ) {
   const { data: nodeRows, error: nodeError } = await supabase
     .from("objective_revision_nodes")
-    .select(`${NODE_COLS}, request_id, title, summary`)
+    .select(`${NODE_COLS}, request_id, title, summary, is_objective`)
     .eq("revision_id", revisionId);
 
   if (nodeError) {
@@ -43,7 +43,13 @@ export async function getRevisionSnapshot(
     throw new ServiceError("Failed to load revision", 500);
   }
 
-  const baseIds = (nodeRows ?? [])
+  // Readers of `nodes` take a null guide base for a request; the objective row
+  // stays out and is named alone.
+  const objectiveNodeId =
+    (nodeRows ?? []).find((n) => n.is_objective)?.id ?? null;
+  const guideAndRequestRows = (nodeRows ?? []).filter((n) => !n.is_objective);
+
+  const baseIds = guideAndRequestRows
     .filter(
       (n): n is typeof n & { guide_base_id: string } => n.guide_base_id !== null
     )
@@ -75,7 +81,7 @@ export async function getRevisionSnapshot(
       });
   }
 
-  const nodes = (nodeRows ?? []).map((n) => {
+  const nodes = guideAndRequestRows.map((n) => {
     const base = n.guide_base_id ? baseMeta.get(n.guide_base_id) : undefined;
     const isRequest = n.guide_base_id === null;
 
@@ -168,6 +174,7 @@ export async function getRevisionSnapshot(
 
   return {
     nodes,
+    objective_node_id: objectiveNodeId,
     orders: orderRows ?? [],
     projected_edges,
     raw_edges,
@@ -328,12 +335,15 @@ export async function updateObjectiveRevision(
   if (targets !== undefined) {
     await syncDraftCuration(supabase, userId, revisionId, targets);
   }
-  if (graph !== undefined) {
-    await syncDraftGraph(supabase, userId, revisionId, graph);
-  }
+  // absent unless a graph was sent; JSON drops the undefined
+  const objective_node_id =
+    graph !== undefined
+      ? (await syncDraftGraph(supabase, userId, revisionId, graph))
+          .objective_node_id
+      : undefined;
 
   const subjects = await loadRevisionTags(supabase, revisionId);
-  return { revision, subjects };
+  return { revision, subjects, objective_node_id };
 }
 
 // Edit one node of a draft revision: swap the pinned variant, toggle target/skip,
@@ -631,7 +641,9 @@ export async function syncDraftCuration(
 }
 
 // Replace a draft's node set and drawn edges with the graph the canvas sent.
-// Target flags, inclusion, and notes are left to syncDraftCuration.
+// Target flags, inclusion, and notes are left to syncDraftCuration. The
+// objective node lands on the revision's one objective row, created here on
+// first sight; its stored id is returned so the client can adopt it.
 // ponytail: six statements, no transaction, like syncDraftCuration. A failed
 // edge insert leaves the nodes updated and the old edges dropped; the next save
 // from the canvas repairs it. The way up is one RPC that does all six.
@@ -661,6 +673,11 @@ export async function syncDraftGraph(
   const selfLoop = graph.edges.some((e) => e.from_node_id === e.to_node_id);
   if (selfLoop) {
     throw new ServiceError("A node cannot be its own prerequisite", 400);
+  }
+
+  const objectiveNodes = graph.nodes.filter((n) => "kind" in n);
+  if (objectiveNodes.length > 1) {
+    throw new ServiceError("A graph holds one objective node", 400);
   }
 
   const guideNodes = graph.nodes.filter((n) => "guide_base_id" in n);
@@ -729,7 +746,7 @@ export async function syncDraftGraph(
 
   const { data: stored, error: storedError } = await supabase
     .from("objective_revision_nodes")
-    .select("id, guide_base_id, is_target")
+    .select("id, guide_base_id, is_target, is_objective")
     .eq("revision_id", revisionId);
 
   if (storedError) {
@@ -737,20 +754,36 @@ export async function syncDraftGraph(
     throw new ServiceError("Failed to load revision nodes", 500);
   }
 
-  // A guide node already on the draft keeps its stored id, so the client's id
-  // for it is only a name the edges in this body use.
+  let objectiveNodeId = (stored ?? []).find((n) => n.is_objective)?.id ?? null;
+  if (objectiveNodes.length > 0 && objectiveNodeId === null) {
+    const { data, error } = await supabase
+      .from("objective_revision_nodes")
+      .insert({ revision_id: revisionId, is_objective: true })
+      .select("id")
+      .single();
+
+    if (error) {
+      console.error(error);
+      throw new ServiceError("Unable to update graph", 400);
+    }
+    objectiveNodeId = data.id;
+  }
+
+  // A guide node already on the draft keeps its stored id, and so does the
+  // objective, so the client's id for either is only a name the edges in this
+  // body use.
   const storedIdByBase = new Map(
     (stored ?? [])
       .filter((n) => n.guide_base_id !== null)
       .map((n) => [n.guide_base_id, n.id])
   );
   const storedIdByClientId = new Map(
-    graph.nodes.map((n) => [
-      n.id,
-      "guide_base_id" in n
-        ? (storedIdByBase.get(n.guide_base_id) as string)
-        : n.id,
-    ])
+    graph.nodes.map((n): [string, string] => {
+      if ("kind" in n) return [n.id, objectiveNodeId as string];
+      if ("guide_base_id" in n)
+        return [n.id, storedIdByBase.get(n.guide_base_id) as string];
+      return [n.id, n.id];
+    })
   );
   // the canvas never sees the closure targets seeded, so don't let it delete it
   const targetBases = (stored ?? [])
@@ -760,9 +793,11 @@ export async function syncDraftGraph(
     targetBases.length > 0 ? await loadClosure(supabase, targetBases) : []
   );
   const kept = new Set(storedIdByClientId.values());
+  // the objective row is never the canvas's to delete, even when a body omits it
   const removed = (stored ?? [])
     .filter(
       (n) =>
+        !n.is_objective &&
         !kept.has(n.id) &&
         !(n.guide_base_id !== null && closure.has(n.guide_base_id))
     )
@@ -803,6 +838,8 @@ export async function syncDraftGraph(
       throw new ServiceError("Unable to update graph", 400);
     }
   }
+
+  return { objective_node_id: objectiveNodeId };
 }
 
 // Publish the draft directly (no review gate): freeze its edge projection, point

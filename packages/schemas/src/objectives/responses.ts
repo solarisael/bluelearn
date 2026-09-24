@@ -83,8 +83,11 @@ export const objectiveSnapshotEdgeSchema = z.object({
   to_id: z.string(),
 });
 
+// `nodes` holds guides and requests only. The objective's own row is named by
+// objective_node_id, which drawn_edges may use as an endpoint.
 export const objectiveSnapshotSchema = z.object({
   nodes: z.array(objectiveSnapshotNodeSchema),
+  objective_node_id: z.string().nullable(),
   orders: z.array(objectiveSnapshotOrderSchema),
   projected_edges: z.array(objectiveSnapshotEdgeSchema),
   raw_edges: z.array(objectiveSnapshotEdgeSchema),
@@ -195,9 +198,12 @@ export const objectiveRevisionDetailResponseSchema = z.strictObject({
   subjects: z.array(subjectTagSchema),
 });
 
+// objective_node_id comes back only with a graph: the stored id the client's
+// objective node id was saved under, which the client adopts.
 export const objectiveRevisionUpdateResponseSchema = z.strictObject({
   revision: objectiveRevisionSchema,
   subjects: z.array(subjectTagSchema),
+  objective_node_id: z.string().nullable().optional(),
 });
 
 // updateObjectiveNode is keyed by guide base and returns a guide node only.

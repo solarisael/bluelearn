@@ -8,11 +8,15 @@ import type {
 import {
   addGuideNode,
   addWalkthrough,
+  adoptNodeId,
   connectNodes,
+  connectedToObjective,
   drawnEdgeId,
   edgesCutByConnecting,
+  ensureObjectiveNode,
   graphToApi,
   guideEdgeId,
+  isGuideNode,
   removeEdges,
   removeNodes,
 } from "@/lib/objectiveGraphEdits";
@@ -30,6 +34,13 @@ const request = (id: string): ObjectiveGraphNode => ({
   type: "guide_request",
   title: `${id} title`,
   summary: `${id} summary`,
+});
+
+const objective = (id: string): ObjectiveGraphNode => ({
+  id,
+  type: "objective",
+  title: "Learn recursion",
+  summary: "Why it matters",
 });
 
 const drawn = (source: string, target: string) => ({
@@ -108,14 +119,11 @@ describe("addWalkthrough", () => {
   };
 
   const slugs = (graph: ObjectiveGraphData) =>
-    graph.nodes.map((n) => (n.type === "guide_request" ? n.id : n.guideSlug));
+    graph.nodes.map((n) => (isGuideNode(n) ? n.guideSlug : n.id));
 
   const slugPairs = (graph: ObjectiveGraphData) => {
     const slugById = new Map(
-      graph.nodes.map((n) => [
-        n.id,
-        n.type === "guide_request" ? n.id : n.guideSlug,
-      ])
+      graph.nodes.map((n) => [n.id, isGuideNode(n) ? n.guideSlug : n.id])
     );
     return graph.edges.map(
       (e) => `${slugById.get(e.source)}>${slugById.get(e.target)}`
@@ -311,6 +319,19 @@ describe("removeNodes", () => {
     expect(graph.nodes.map((n) => n.id)).toEqual(["a", "c"]);
     expect(pairs(graph)).toEqual(["a>c"]);
   });
+
+  it("never removes the objective card, and still removes the rest", () => {
+    const graph = removeNodes(
+      {
+        nodes: [objective("o"), guide("a")],
+        edges: [drawn("a", "o")],
+      },
+      ["o", "a"]
+    );
+
+    expect(graph.nodes.map((n) => n.id)).toEqual(["o"]);
+    expect(graph.edges).toEqual([]);
+  });
 });
 
 describe("removeEdges", () => {
@@ -346,5 +367,121 @@ describe("graphToApi", () => {
       ],
       edges: [{ from_node_id: "a", to_node_id: "r" }],
     });
+  });
+
+  it("sends the objective card as the objective node, with its edges", () => {
+    const body = graphToApi({
+      nodes: [guide("a"), objective("o")],
+      edges: [drawn("a", "o")],
+    });
+
+    expect(body).toEqual({
+      nodes: [
+        { id: "a", guide_base_id: "base-a" },
+        { id: "o", kind: "objective" },
+      ],
+      edges: [{ from_node_id: "a", to_node_id: "o" }],
+    });
+  });
+
+  it("sends nothing while the objective card is the only card", () => {
+    expect(graphToApi({ nodes: [objective("o")], edges: [] })).toBeUndefined();
+    expect(graphToApi({ nodes: [], edges: [] })).toBeUndefined();
+  });
+});
+
+describe("ensureObjectiveNode", () => {
+  it("adds one card to a graph saved before it existed, keeping the rest", () => {
+    const old: ObjectiveGraphData = {
+      nodes: [guide("a"), guide("b")],
+      edges: [drawn("a", "b")],
+    };
+
+    const graph = ensureObjectiveNode(old, "Title", "Summary");
+
+    expect(graph.nodes.slice(0, 2)).toEqual(old.nodes);
+    expect(graph.nodes[2]).toEqual({
+      id: expect.any(String),
+      type: "objective",
+      title: "Title",
+      summary: "Summary",
+    });
+    expect(graph.edges).toBe(old.edges);
+  });
+
+  it("returns the same graph once the card matches, and follows new text", () => {
+    const graph: ObjectiveGraphData = {
+      nodes: [objective("o")],
+      edges: [],
+    };
+
+    expect(
+      ensureObjectiveNode(graph, "Learn recursion", "Why it matters")
+    ).toBe(graph);
+    expect(ensureObjectiveNode(graph, "Learn loops", "").nodes).toEqual([
+      { id: "o", type: "objective", title: "Learn loops", summary: "" },
+    ]);
+  });
+
+  it("folds a second card into the first, edges and all", () => {
+    const graph = ensureObjectiveNode(
+      {
+        nodes: [objective("o"), guide("a"), objective("x")],
+        edges: [drawn("a", "x")],
+      },
+      "Learn recursion",
+      "Why it matters"
+    );
+
+    expect(graph.nodes.map((n) => n.id)).toEqual(["o", "a"]);
+    expect(graph.edges).toEqual([drawn("a", "o")]);
+  });
+});
+
+describe("adoptNodeId", () => {
+  it("renames the placeholder in the node and in every edge id naming it", () => {
+    const graph = adoptNodeId(
+      {
+        nodes: [guide("a"), objective("tmp"), guide("b")],
+        edges: [drawn("a", "tmp"), drawn("tmp", "b"), fromGuides("a", "b")],
+      },
+      "tmp",
+      "stored"
+    );
+
+    expect(graph.nodes.map((n) => n.id)).toEqual(["a", "stored", "b"]);
+    expect(graph.edges).toEqual([
+      drawn("a", "stored"),
+      drawn("stored", "b"),
+      fromGuides("a", "b"),
+    ]);
+  });
+
+  it("returns the graph untouched when the ids already agree", () => {
+    const graph = { nodes: [objective("o")], edges: [] };
+
+    expect(adoptNodeId(graph, "o", "o")).toBe(graph);
+  });
+});
+
+describe("connectedToObjective", () => {
+  it("reaches both ways from the card and leaves other groups out", () => {
+    const reached = connectedToObjective({
+      nodes: ["a", "b", "c", "d", "e"].map(guide).concat(objective("o")),
+      edges: [
+        drawn("a", "o"),
+        drawn("o", "b"),
+        drawn("c", "a"),
+        drawn("d", "e"),
+      ],
+    });
+
+    expect(reached).toEqual(new Set(["o", "a", "b", "c"]));
+  });
+
+  it("cuts nothing off while there is no card", () => {
+    expect(
+      connectedToObjective({ nodes: [guide("a"), guide("b")], edges: [] })
+    ).toEqual(new Set(["a", "b"]));
   });
 });
