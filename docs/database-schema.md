@@ -253,6 +253,8 @@ The projected prerequisite edges among included nodes, computed once at publish 
 
 These rows hold drawn connections and the published projection of the global guide graph. Node IDs preserve connections that involve requests.
 Guide projection excludes null guide base IDs so requests cannot stop traversal through omitted guides.
+The reader shows the graph by default. A toggle shows the authored linear order.
+The graph bridges hidden nodes. Contribution Preview uses the same renderer without navigation links.
 
 ### `objective_revision_node_orders`
 

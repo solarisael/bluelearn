@@ -1,5 +1,6 @@
 import { Link, createFileRoute, useLocation } from "@tanstack/react-router";
 import { Ellipsis, House, Pencil } from "lucide-react";
+import { useState } from "react";
 
 import type { Breadcrumb } from "@/lib/breadcrumbs";
 import { buildBreadcrumbs } from "@/lib/breadcrumbs";
@@ -21,6 +22,7 @@ import { buildPageMeta } from "@/lib/seo";
 import ObjectiveFlow from "@/components/objective/ObjectiveFlow";
 import { ObjectiveActions } from "@/components/objective/ObjectiveActions";
 import { ObjectiveHeader } from "@/components/objective/ObjectiveHeader";
+import { ObjectiveGraph } from "@/components/objective/ObjectiveGraph";
 
 export const Route = createFileRoute("/objectives/$slug/")({
   loader: async ({ params: { slug }, abortController }) => {
@@ -155,10 +157,19 @@ function ObjectiveMenu({
   );
 }
 
+// Keyed by slug so moving to another objective starts back on the graph.
 function PathPage() {
+  const { slug } = Route.useParams();
+
+  return <ObjectivePage key={slug} />;
+}
+
+function ObjectivePage() {
   const { slug } = Route.useParams();
   const { objective, snapshot, guides, identity } = Route.useLoaderData();
   const isCurator = identity?.roles.includes("curator") ?? false;
+
+  const [view, setView] = useState<"graph" | "linear">("graph");
 
   const breadcrumbOrigin = useLocation({
     select: (location) => location.state.breadcrumbOrigin,
@@ -178,6 +189,17 @@ function PathPage() {
             <Breadcrumbs crumbs={breadcrumbs} />
 
             <div className="flex shrink-0 items-center gap-2">
+              <Button
+                variant="outline"
+                size="lg"
+                onClick={() =>
+                  setView((current) =>
+                    current === "graph" ? "linear" : "graph"
+                  )
+                }
+              >
+                {view === "graph" ? "View Linear" : "View Graph"}
+              </Button>
               <ObjectiveActions slug={slug} />
 
               {isCurator && objective.current_revision_id ? (
@@ -203,6 +225,12 @@ function PathPage() {
         <p className="text-sm text-muted-foreground">
           This objective has no sub-objectives yet.
         </p>
+      ) : view === "graph" ? (
+        <ObjectiveGraph
+          objective={{ slug, title: objective.title }}
+          snapshot={snapshot}
+          guides={guides}
+        />
       ) : (
         <ObjectiveFlow objective={objective} targets={targets} />
       )}
