@@ -14,6 +14,9 @@ type ReaderNode = {
   guideSlug: string | null;
   isRequest: boolean;
   isTarget: boolean;
+  variantSlug: string | null;
+  guideId: string | null;
+  isIncluded: boolean;
 };
 
 // The graph shows the complete objective as the curator drew it, skipped
@@ -46,9 +49,15 @@ export function buildObjectiveGraph(
     const guide = node.slug ? guideBySlug.get(node.slug) : undefined;
 
     nodes.set(node.id, {
-      guideSlug: isRequest ? null : node.slug,
+      guideSlug:
+        isRequest || node.guide_id === null || node.variant_slug == null
+          ? null
+          : node.slug,
       isRequest,
       isTarget: node.is_target,
+      variantSlug: node.variant_slug ?? null,
+      guideId: node.guide_id,
+      isIncluded: node.is_included,
     });
 
     return {

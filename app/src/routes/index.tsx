@@ -6,6 +6,7 @@ import type { SearchFilters } from "@/lib/api/search";
 
 import { Route as SubjectRoute } from "@/routes/subjects.$slug";
 import { listSubjects } from "@/lib/api/subjects";
+import { beginSearchSubmission } from "@/components/analytics/SearchTelemetry";
 import { SearchBar } from "@/components/SearchBar";
 import { SearchFilterMenu } from "@/components/SearchFilterMenu";
 import { Separator } from "@/components/ui/separator";
@@ -107,15 +108,19 @@ function RouteComponent() {
           onChange={setQuery}
           onSubmit={() => {
             const q = query.trim();
-            if (q)
-              navigate({
-                to: "/browse",
-                search: {
-                  q,
-                  scope: filters.scope,
-                  kind: filters.knowledgeType,
-                },
-              });
+
+            if (!q) return;
+
+            const searchSubmissionId = beginSearchSubmission();
+            navigate({
+              to: "/browse",
+              search: {
+                q,
+                scope: filters.scope,
+                kind: filters.knowledgeType,
+              },
+              state: { searchSubmissionId },
+            });
           }}
           filter={<SearchFilterMenu value={filters} onChange={setFilters} />}
         />

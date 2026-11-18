@@ -4,7 +4,9 @@ import type {
   ObjectiveSnapshot,
   ObjectiveSnapshotNode,
 } from "@bluelearn/schemas";
+import type { LearningStep } from "@/lib/api/learning";
 import {
+  buildObjectiveFlow,
   buildSubObjectives,
   findGuideNeighbours,
   guideAnchor,
@@ -19,7 +21,9 @@ const guideNode = (
 ): ObjectiveSnapshotNode => ({
   id,
   guide_base_id: `base-${id}`,
-  guide_id: null,
+  guide_id: `variant-${id}`,
+  variant_slug: `pinned-${id}`,
+  guide_revision_id: `revision-${id}`,
   slug: id,
   title: `Guide ${id}`,
   summary: null,
@@ -33,7 +37,14 @@ const guideNode = (
 });
 
 const requestNode = (id: string): ObjectiveSnapshotNode =>
-  guideNode(id, { guide_base_id: null, slug: null, title: `Request ${id}` });
+  guideNode(id, {
+    guide_base_id: null,
+    guide_id: null,
+    variant_slug: null,
+    guide_revision_id: null,
+    slug: null,
+    title: `Request ${id}`,
+  });
 
 const target = (id: string, position: number) =>
   guideNode(id, { is_target: true, target_position: position });
@@ -58,18 +69,24 @@ const slugs = (neighbours: ReturnType<typeof findGuideNeighbours>) =>
 describe("parseObjectiveGuideSearch", () => {
   it("keeps the objective and target when both are strings", () => {
     expect(
-      parseObjectiveGuideSearch({ objective: "games", target: "ship" })
-    ).toEqual({ objective: "games", target: "ship" });
+      parseObjectiveGuideSearch({
+        objective: "games",
+        target: "ship",
+        revision: "objective-v1",
+      })
+    ).toEqual({ objective: "games", target: "ship", revision: "objective-v1" });
   });
 
   it("drops values that are missing or not strings", () => {
     expect(parseObjectiveGuideSearch({})).toEqual({
       objective: undefined,
       target: undefined,
+      revision: undefined,
     });
     expect(parseObjectiveGuideSearch({ objective: 3, target: ["a"] })).toEqual({
       objective: undefined,
       target: undefined,
+      revision: undefined,
     });
   });
 });
@@ -163,6 +180,7 @@ describe("findGuideNeighbours", () => {
     expect(findGuideNeighbours(linear, "setup")?.next).toEqual({
       slug: "sprites",
       title: "Guide sprites",
+      variantSlug: "pinned-sprites",
     });
   });
 
@@ -246,5 +264,84 @@ describe("findGuideNeighbours", () => {
 
   it("returns null for a guide outside the objective", () => {
     expect(findGuideNeighbours(linear, "elsewhere")).toBeNull();
+  });
+});
+
+describe("pinned objective learning state", () => {
+  const snapshot = snapshotOf(
+    [guideNode("intro"), target("ship", 0)],
+    [order("ship", "intro", 0)]
+  );
+  const read: LearningStep = {
+    guide_base_id: "base-intro",
+    guide_id: "variant-intro",
+    variant_slug: "pinned-intro",
+    slug: "intro",
+    title: "Guide intro",
+    revision_id: "older-published-revision",
+    state: "read",
+    has_newer_revision: true,
+    is_target: false,
+  };
+
+  it("keeps an older read mark on the pinned variant and shows newer content", () => {
+    const { targets } = buildObjectiveFlow(snapshot, [], [read]);
+    const intro = targets[0].guides[0].guide;
+
+    expect(intro.variantSlug).toBe("pinned-intro");
+    expect(intro.readState).toBe("read");
+    expect(intro.hasNewerRevision).toBe(true);
+  });
+
+  it("does not count a different variant of the same guide base", () => {
+    const { targets } = buildObjectiveFlow(
+      snapshot,
+      [],
+      [{ ...read, guide_id: "other-variant" }]
+    );
+
+    expect(targets[0].guides[0].guide.readState).toBeUndefined();
+    expect(
+      findGuideNeighbours(snapshot, "intro", undefined, "other-variant")
+    ).toBeNull();
+  });
+
+  it("keeps skipped guides out of progress and neighbor navigation", () => {
+    const skipped = snapshotOf(
+      [
+        guideNode("intro"),
+        guideNode("skip", { is_included: false }),
+        target("ship", 0),
+      ],
+      [order("ship", "intro", 0), order("ship", "skip", 1)]
+    );
+    const { targets } = buildObjectiveFlow(
+      skipped,
+      [],
+      [{ ...read, guide_id: "variant-skip" }]
+    );
+
+    expect(targets[0].guides[1].guide.readState).toBeUndefined();
+    expect(findGuideNeighbours(skipped, "intro")?.next?.slug).toBe("ship");
+  });
+
+  it("does not substitute the canonical page for a missing pinned variant", () => {
+    const unavailable = snapshotOf(
+      [
+        guideNode("intro"),
+        guideNode("missing", { variant_slug: null }),
+        target("ship", 0),
+      ],
+      [order("ship", "intro", 0), order("ship", "missing", 1)]
+    );
+    const { targets } = buildObjectiveFlow(unavailable, []);
+
+    expect(targets[0].guides[1].guide.readState).toBe("unavailable");
+    expect(findGuideNeighbours(unavailable, "intro")?.next?.variantSlug).toBe(
+      "pinned-ship"
+    );
+    expect(findGuideNeighbours(snapshot, "intro", "base-ship")?.targetId).toBe(
+      "ship"
+    );
   });
 });

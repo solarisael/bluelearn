@@ -1,5 +1,6 @@
 import { Link } from "@tanstack/react-router";
-import type { BreadcrumbOrigin } from "@/lib/breadcrumbs";
+import type { AnalyticsSource, BreadcrumbOrigin } from "@/lib/breadcrumbs";
+import type { ObjectiveGuideSearch } from "@/lib/objectiveSnapshot";
 import type { Route as GuideRoute } from "@/routes/guides/$slug/index";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -24,10 +25,23 @@ type PropTypes = {
   guide: GuideProp;
   to?: typeof GuideRoute.to;
   origin?: BreadcrumbOrigin;
-  search?: { objective?: string; target?: string };
+  variantSlug?: string;
+  source?: AnalyticsSource;
+  onSelect?: React.MouseEventHandler<HTMLAnchorElement>;
+  readStatus?: "read" | "unread" | "requested" | "unavailable";
+  search?: ObjectiveGuideSearch;
 };
 
-export const GuideCard = ({ guide, to, origin, search }: PropTypes) => {
+export const GuideCard = ({
+  guide,
+  to,
+  origin,
+  search,
+  variantSlug,
+  source,
+  onSelect,
+  readStatus,
+}: PropTypes) => {
   const card = (
     <Card className="group h-full rounded-md bg-background shadow-none transition-colors hover:bg-muted">
       <CardHeader className="relative p-4">
@@ -35,6 +49,11 @@ export const GuideCard = ({ guide, to, origin, search }: PropTypes) => {
           <p className="font-mono text-xs tracking-wide text-muted-foreground uppercase">
             {guide.isRequest ? "Guide request" : "Guide"}
           </p>
+          {readStatus && (
+            <Badge variant="outline" className="capitalize">
+              {readStatus}
+            </Badge>
+          )}
           {guide.status && (
             <Badge
               variant="default"
@@ -85,10 +104,14 @@ export const GuideCard = ({ guide, to, origin, search }: PropTypes) => {
   }
   return (
     <Link
-      to={to}
-      params={{ slug: guide.slug }}
+      to={variantSlug ? "/guides/$slug/$variantSlug" : to}
+      params={{ slug: guide.slug, ...(variantSlug && { variantSlug }) }}
       search={search}
-      state={{ breadcrumbOrigin: origin }}
+      state={{
+        breadcrumbOrigin: origin,
+        analyticsSource: source ?? origin?.type,
+      }}
+      onClick={onSelect}
     >
       {card}
     </Link>

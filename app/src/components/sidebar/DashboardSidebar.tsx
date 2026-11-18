@@ -1,5 +1,10 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { FileCheckCorner, Shield, Users } from "lucide-react";
+import {
+  ChartNoAxesCombined,
+  FileCheckCorner,
+  Shield,
+  Users,
+} from "lucide-react";
 import type { LucideProps } from "lucide-react";
 import type { ForwardRefExoticComponent, RefAttributes } from "react";
 import { cn } from "@/lib/utils";
@@ -27,6 +32,12 @@ const items: Array<{
     roles: ["admin"],
   },
   {
+    label: "Analytics",
+    to: "/dashboard/analytics",
+    icon: ChartNoAxesCombined,
+    roles: ["admin"],
+  },
+  {
     label: "Verifier Assignments",
     to: "/dashboard/assignments",
     icon: FileCheckCorner,
@@ -39,13 +50,16 @@ export const DashboardSidebar = () => {
     select: (state) => state.location.pathname,
   });
 
-  const { roles } = useAuth();
+  const { roles, loading, rolesLoading } = useAuth();
 
   const isAdmin = roles.includes("admin");
   const isLeadVerifier = roles.includes("lead-verifier");
 
   const visibleItems = items.filter(
-    (item) => !item.roles || item.roles.some((r) => roles.includes(r))
+    (item) =>
+      !loading &&
+      !rolesLoading &&
+      (!item.roles || item.roles.some((role) => roles.includes(role)))
   );
 
   return (
@@ -85,11 +99,18 @@ export const DashboardTabs = () => {
   const pathname = useRouterState({
     select: (state) => state.location.pathname,
   });
+  const { roles, loading, rolesLoading } = useAuth();
+  const visibleItems = items.filter(
+    (item) =>
+      !loading &&
+      !rolesLoading &&
+      (!item.roles || item.roles.some((role) => roles.includes(role)))
+  );
 
   return (
     <nav className="-mx-4 mb-6 overflow-x-auto border-b px-4 sm:-mx-8 sm:px-8 md:hidden">
       <ul className="flex w-max items-center gap-6">
-        {items.map((item) => {
+        {visibleItems.map((item) => {
           const active = pathname === item.to;
 
           return (

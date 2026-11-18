@@ -33,6 +33,9 @@ import { reviewsRouter } from "./routes/reviews";
 import { mediaRouter } from "./routes/media";
 import { searchRouter } from "./routes/search";
 import { dashboardRouter } from "./routes/dashboard";
+import { learningRouter } from "./routes/learning";
+import { analyticsRouter } from "./routes/analytics";
+import { cleanupLearningAnalytics } from "./services/analytics.service";
 
 let specHandler: MiddlewareHandler<HonoEnv> | undefined;
 const openApiHandler: MiddlewareHandler<HonoEnv> = (c, next) => {
@@ -63,7 +66,9 @@ const app = new Hono<HonoEnv>()
   .route("/reviews", reviewsRouter)
   .route("/media", mediaRouter)
   .route("/search", searchRouter)
-  .route("/dashboard", dashboardRouter);
+  .route("/dashboard", dashboardRouter)
+  .route("/learning", learningRouter)
+  .route("/analytics", analyticsRouter);
 
 // Services throw ServiceError to signal HTTP-meaningful failures; map them to
 // JSON here so handlers stay free of repeated `if (error) return c.json(...)`.
@@ -86,6 +91,7 @@ async function scheduled(event: ScheduledController, env: Bindings) {
     await Promise.allSettled([
       assemblePendingPanels(supabase),
       sweepExpiredReviewSeats(supabase),
+      cleanupLearningAnalytics(supabase, env),
     ]);
   }
   if (event.cron === "0 */12 * * *") await promoteAllCanonicals(supabase);

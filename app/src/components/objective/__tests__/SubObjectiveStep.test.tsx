@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ReactNode } from "react";
 import type {
@@ -8,34 +8,7 @@ import type {
 } from "@bluelearn/schemas";
 import { buildObjectiveFlow } from "@/lib/objectiveSnapshot";
 import { SubObjectiveStep } from "@/components/objective/SubObjectiveStep";
-
-// Keep link destinations visible without mounting the application router.
-vi.mock("@tanstack/react-router", () => ({
-  Link: ({
-    children,
-    to,
-    params,
-    search,
-  }: {
-    children: ReactNode;
-    to: string;
-    params?: { slug: string };
-    search?: Record<string, string | undefined>;
-  }) => {
-    const path = params ? to.replace("$slug", params.slug) : to;
-    const query = new URLSearchParams(
-      Object.entries(search ?? {}).filter(
-        (entry): entry is [string, string] => entry[1] !== undefined
-      )
-    ).toString();
-
-    return <a href={query ? `${path}?${query}` : path}>{children}</a>;
-  },
-}));
-
-vi.mock("@/routes/guides/$slug/index", () => ({
-  Route: { to: "/guides/$slug" },
-}));
+import { renderWithRouter } from "@/components/objective/__tests__/renderWithRouter";
 
 const Stepper = {
   Content: ({ children }: { children: ReactNode }) => <div>{children}</div>,
@@ -47,7 +20,9 @@ const node = (
 ): ObjectiveSnapshotNode => ({
   id,
   guide_base_id: null,
-  guide_id: null,
+  guide_id: fields.guide_base_id ? `variant-${id}` : null,
+  variant_slug: fields.guide_base_id ? `pinned-${id}` : null,
+  guide_revision_id: fields.guide_base_id ? `revision-${id}` : null,
   slug: null,
   title: null,
   summary: null,
@@ -85,11 +60,11 @@ describe("SubObjectiveStep", () => {
     vi.restoreAllMocks();
   });
 
-  it("links only the guide and lists each request once, as a request", () => {
+  it("links only the guide and lists each request once, as a request", async () => {
     const consoleError = vi.spyOn(console, "error");
     const { targets } = buildObjectiveFlow(snapshot, []);
 
-    render(
+    await renderWithRouter(
       <SubObjectiveStep
         Stepper={Stepper}
         target={targets[0]}
@@ -99,7 +74,7 @@ describe("SubObjectiveStep", () => {
 
     const links = screen.queryAllByRole("link");
     expect(links.map((link) => link.getAttribute("href"))).toEqual([
-      "/guides/loops?objective=proofs&target=request-b",
+      "/guides/loops/pinned-guide?objective=proofs&target=request-b",
     ]);
     expect(
       screen.getByRole("heading", { name: "Loop invariants" })
@@ -116,10 +91,10 @@ describe("SubObjectiveStep", () => {
     expect(keyWarnings).toHaveLength(0);
   });
 
-  it("anchors each openable guide so a return can scroll to it", () => {
+  it("anchors each openable guide so a return can scroll to it", async () => {
     const { targets } = buildObjectiveFlow(snapshot, []);
 
-    const { container } = render(
+    const { container } = await renderWithRouter(
       <SubObjectiveStep
         Stepper={Stepper}
         target={targets[0]}

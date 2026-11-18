@@ -377,6 +377,8 @@ export async function getGuideBySlug(supabase: DB, rawSlug: string) {
 
   const detail: Guide = {
     slug: guide.slug ?? "",
+    guide_base_id: guide.id,
+    revision_id: current?.id ?? null,
     variant_id: canonical?.id ?? null,
     variant_slug: canonical?.slug ?? null,
     title: current?.title ?? "",

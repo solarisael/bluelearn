@@ -19,9 +19,20 @@ export type Breadcrumb = {
   hash?: string;
 };
 
+export type AnalyticsSource =
+  | "search"
+  | "subject"
+  | "objective"
+  | "guide"
+  | "direct"
+  | "history"
+  | "resume";
+
 declare module "@tanstack/react-router" {
   interface HistoryState {
     breadcrumbOrigin?: BreadcrumbOrigin;
+    analyticsSource?: AnalyticsSource;
+    searchSubmissionId?: string;
   }
 }
 

@@ -34,27 +34,38 @@ import { GuideMobileMenu } from "@/components/GuideMobileMenu";
 import { DownvoteModal } from "@/components/modals/DownvoteModal";
 import { useVote } from "@/lib/useVote";
 import { useSuspensionStatus } from "@/lib/authContext";
+import { parseObjectiveGuideSearch } from "@/lib/objectiveSnapshot";
+import { ReaderLearning } from "@/components/learning/ReaderLearning";
+import { ReaderLoadFailure } from "@/components/learning/ReaderLoadFailure";
+import { ApiError } from "@/lib/api/apiHelpers";
 
 export const Route = createFileRoute("/guides/$slug/$variantSlug/")({
+  validateSearch: parseObjectiveGuideSearch,
   loader: async ({ params, abortController }) => {
     try {
       const variant = await getVariantBySlug(params.slug, params.variantSlug, {
         signal: abortController.signal,
       });
+
       if (!variant.current) throw notFound();
 
       return { variant, current: variant.current };
-    } catch {
-      throw notFound();
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 404) throw notFound();
+
+      throw error;
     }
   },
   component: RouteComponent,
+  errorComponent: ({ error }) => <ReaderLoadFailure error={error} />,
+  notFoundComponent: () => <ReaderLoadFailure unavailable />,
 });
 
 function RouteComponent() {
   const canAuthor = useSuspensionStatus() === "active";
   const { slug, variantSlug } = Route.useParams();
   const { variant, current } = Route.useLoaderData();
+  const search = Route.useSearch();
 
   const { vote, tally, submitting, upvote, downvote, removeVote } = useVote(
     variant.id,
@@ -248,6 +259,19 @@ function RouteComponent() {
             showToc
             isOfficial={variant.is_official}
           />
+          {current.body !== null ? (
+            <ReaderLearning
+              guide={{
+                guideId: variant.id,
+                guideBaseId: variant.guide_base_id,
+                revisionId: current.id,
+                slug,
+              }}
+              search={search}
+            />
+          ) : (
+            <ReaderLoadFailure unavailable />
+          )}
         </main>
       </section>
     </div>

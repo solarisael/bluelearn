@@ -110,6 +110,8 @@ function revision(systemsIncluded: boolean) {
     id,
     guide_base_id: baseId,
     guide_id: null,
+    variant_slug: null,
+    guide_revision_id: null,
     slug,
     title,
     summary: null,

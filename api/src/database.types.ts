@@ -34,6 +34,172 @@ export type Database = {
   }
   public: {
     Tables: {
+      analytics_collection_state: {
+        Row: {
+          collection_started_at: string | null
+          enabled: boolean
+          singleton: boolean
+        }
+        Insert: {
+          collection_started_at?: string | null
+          enabled?: boolean
+          singleton?: boolean
+        }
+        Update: {
+          collection_started_at?: string | null
+          enabled?: boolean
+          singleton?: boolean
+        }
+        Relationships: []
+      }
+      analytics_collection_windows: {
+        Row: {
+          ended_at: string | null
+          id: number
+          started_at: string
+        }
+        Insert: {
+          ended_at?: string | null
+          id?: never
+          started_at: string
+        }
+        Update: {
+          ended_at?: string | null
+          id?: never
+          started_at?: string
+        }
+        Relationships: []
+      }
+      analytics_daily: {
+        Row: {
+          anonymous_count: number
+          day: string
+          dimension_key: string
+          entity_type: string | null
+          error_category: string | null
+          event_count: number
+          guide_base_id: string | null
+          name: string
+          objective_id: string | null
+          source: string | null
+        }
+        Insert: {
+          anonymous_count: number
+          day: string
+          dimension_key: string
+          entity_type?: string | null
+          error_category?: string | null
+          event_count: number
+          guide_base_id?: string | null
+          name: string
+          objective_id?: string | null
+          source?: string | null
+        }
+        Update: {
+          anonymous_count?: number
+          day?: string
+          dimension_key?: string
+          entity_type?: string | null
+          error_category?: string | null
+          event_count?: number
+          guide_base_id?: string | null
+          name?: string
+          objective_id?: string | null
+          source?: string | null
+        }
+        Relationships: []
+      }
+      analytics_event_receipts: {
+        Row: {
+          event_id: string
+          received_at: string
+        }
+        Insert: {
+          event_id: string
+          received_at?: string
+        }
+        Update: {
+          event_id?: string
+          received_at?: string
+        }
+        Relationships: []
+      }
+      analytics_events: {
+        Row: {
+          entity_type: string | null
+          error_category: string | null
+          event_id: string
+          guide_base_id: string | null
+          guide_id: string | null
+          name: string
+          objective_id: string | null
+          objective_revision_id: string | null
+          received_at: string
+          result_count: number | null
+          revision_id: string | null
+          rolled_up_at: string | null
+          source: string | null
+          user_id: string | null
+          was_anonymous: boolean
+        }
+        Insert: {
+          entity_type?: string | null
+          error_category?: string | null
+          event_id: string
+          guide_base_id?: string | null
+          guide_id?: string | null
+          name: string
+          objective_id?: string | null
+          objective_revision_id?: string | null
+          received_at?: string
+          result_count?: number | null
+          revision_id?: string | null
+          rolled_up_at?: string | null
+          source?: string | null
+          user_id?: string | null
+          was_anonymous?: boolean
+        }
+        Update: {
+          entity_type?: string | null
+          error_category?: string | null
+          event_id?: string
+          guide_base_id?: string | null
+          guide_id?: string | null
+          name?: string
+          objective_id?: string | null
+          objective_revision_id?: string | null
+          received_at?: string
+          result_count?: number | null
+          revision_id?: string | null
+          rolled_up_at?: string | null
+          source?: string | null
+          user_id?: string | null
+          was_anonymous?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "analytics_events_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: true
+            referencedRelation: "analytics_event_receipts"
+            referencedColumns: ["event_id"]
+          },
+          {
+            foreignKeyName: "analytics_events_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "dashboard_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "analytics_events_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       disclaimers: {
         Row: {
           description: string | null
@@ -479,6 +645,409 @@ export type Database = {
             columns: ["guide_base_id"]
             isOneToOne: false
             referencedRelation: "published_guides"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      learning_enrollments: {
+        Row: {
+          completed_at: string | null
+          completed_revision_id: string | null
+          last_completed_at: string | null
+          last_resumed_at: string | null
+          objective_id: string
+          objective_revision_id: string
+          position_guide_base_id: string | null
+          started_at: string
+          target_guide_base_id: string | null
+          user_id: string
+        }
+        Insert: {
+          completed_at?: string | null
+          completed_revision_id?: string | null
+          last_completed_at?: string | null
+          last_resumed_at?: string | null
+          objective_id: string
+          objective_revision_id: string
+          position_guide_base_id?: string | null
+          started_at?: string
+          target_guide_base_id?: string | null
+          user_id: string
+        }
+        Update: {
+          completed_at?: string | null
+          completed_revision_id?: string | null
+          last_completed_at?: string | null
+          last_resumed_at?: string | null
+          objective_id?: string
+          objective_revision_id?: string
+          position_guide_base_id?: string | null
+          started_at?: string
+          target_guide_base_id?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "learning_enrollments_completed_revision_id_fkey"
+            columns: ["completed_revision_id"]
+            isOneToOne: false
+            referencedRelation: "objective_revisions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "learning_enrollments_objective_id_fkey"
+            columns: ["objective_id"]
+            isOneToOne: false
+            referencedRelation: "objectives"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "learning_enrollments_objective_revision_id_fkey"
+            columns: ["objective_revision_id"]
+            isOneToOne: false
+            referencedRelation: "objective_revisions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "learning_enrollments_position_guide_base_id_fkey"
+            columns: ["position_guide_base_id"]
+            isOneToOne: false
+            referencedRelation: "guide_bases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "learning_enrollments_position_guide_base_id_fkey"
+            columns: ["position_guide_base_id"]
+            isOneToOne: false
+            referencedRelation: "published_guides"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "learning_enrollments_target_guide_base_id_fkey"
+            columns: ["target_guide_base_id"]
+            isOneToOne: false
+            referencedRelation: "guide_bases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "learning_enrollments_target_guide_base_id_fkey"
+            columns: ["target_guide_base_id"]
+            isOneToOne: false
+            referencedRelation: "published_guides"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "learning_enrollments_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "dashboard_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "learning_enrollments_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      learning_mutation_receipts: {
+        Row: {
+          action: string
+          event_id: string
+          input: Json
+          objective_id: string
+          received_at: string
+          user_id: string
+        }
+        Insert: {
+          action: string
+          event_id: string
+          input: Json
+          objective_id: string
+          received_at?: string
+          user_id: string
+        }
+        Update: {
+          action?: string
+          event_id?: string
+          input?: Json
+          objective_id?: string
+          received_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "learning_mutation_receipts_objective_id_fkey"
+            columns: ["objective_id"]
+            isOneToOne: false
+            referencedRelation: "objectives"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "learning_mutation_receipts_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "dashboard_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "learning_mutation_receipts_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      learning_preferences: {
+        Row: {
+          history_paused: boolean
+          show_completed_objectives: boolean
+          user_id: string
+        }
+        Insert: {
+          history_paused?: boolean
+          show_completed_objectives?: boolean
+          user_id: string
+        }
+        Update: {
+          history_paused?: boolean
+          show_completed_objectives?: boolean
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "learning_preferences_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "dashboard_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "learning_preferences_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      learning_reads: {
+        Row: {
+          guide_id: string
+          marked_at: string
+          revision_id: string
+          user_id: string
+        }
+        Insert: {
+          guide_id: string
+          marked_at?: string
+          revision_id: string
+          user_id: string
+        }
+        Update: {
+          guide_id?: string
+          marked_at?: string
+          revision_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "learning_reads_guide_id_fkey"
+            columns: ["guide_id"]
+            isOneToOne: false
+            referencedRelation: "guides"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "learning_reads_guide_id_fkey"
+            columns: ["guide_id"]
+            isOneToOne: false
+            referencedRelation: "published_guides"
+            referencedColumns: ["guide_id"]
+          },
+          {
+            foreignKeyName: "learning_reads_revision_id_fkey"
+            columns: ["revision_id"]
+            isOneToOne: false
+            referencedRelation: "guide_revisions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "learning_reads_revision_id_fkey"
+            columns: ["revision_id"]
+            isOneToOne: false
+            referencedRelation: "published_guides"
+            referencedColumns: ["revision_id"]
+          },
+          {
+            foreignKeyName: "learning_reads_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "dashboard_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "learning_reads_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      learning_visit_receipts: {
+        Row: {
+          event_id: string
+          received_at: string
+          user_id: string
+        }
+        Insert: {
+          event_id: string
+          received_at?: string
+          user_id: string
+        }
+        Update: {
+          event_id?: string
+          received_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "learning_visit_receipts_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "dashboard_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "learning_visit_receipts_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      learning_visits: {
+        Row: {
+          guide_base_id: string
+          guide_id: string
+          objective_id: string | null
+          objective_revision_id: string | null
+          revision_id: string
+          source: string
+          target_guide_base_id: string | null
+          user_id: string
+          visited_at: string
+        }
+        Insert: {
+          guide_base_id: string
+          guide_id: string
+          objective_id?: string | null
+          objective_revision_id?: string | null
+          revision_id: string
+          source: string
+          target_guide_base_id?: string | null
+          user_id: string
+          visited_at?: string
+        }
+        Update: {
+          guide_base_id?: string
+          guide_id?: string
+          objective_id?: string | null
+          objective_revision_id?: string | null
+          revision_id?: string
+          source?: string
+          target_guide_base_id?: string | null
+          user_id?: string
+          visited_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "learning_visits_guide_base_id_fkey"
+            columns: ["guide_base_id"]
+            isOneToOne: false
+            referencedRelation: "guide_bases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "learning_visits_guide_base_id_fkey"
+            columns: ["guide_base_id"]
+            isOneToOne: false
+            referencedRelation: "published_guides"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "learning_visits_guide_id_fkey"
+            columns: ["guide_id"]
+            isOneToOne: false
+            referencedRelation: "guides"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "learning_visits_guide_id_fkey"
+            columns: ["guide_id"]
+            isOneToOne: false
+            referencedRelation: "published_guides"
+            referencedColumns: ["guide_id"]
+          },
+          {
+            foreignKeyName: "learning_visits_objective_id_fkey"
+            columns: ["objective_id"]
+            isOneToOne: false
+            referencedRelation: "objectives"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "learning_visits_objective_revision_id_fkey"
+            columns: ["objective_revision_id"]
+            isOneToOne: false
+            referencedRelation: "objective_revisions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "learning_visits_revision_id_fkey"
+            columns: ["revision_id"]
+            isOneToOne: false
+            referencedRelation: "guide_revisions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "learning_visits_revision_id_fkey"
+            columns: ["revision_id"]
+            isOneToOne: false
+            referencedRelation: "published_guides"
+            referencedColumns: ["revision_id"]
+          },
+          {
+            foreignKeyName: "learning_visits_target_guide_base_id_fkey"
+            columns: ["target_guide_base_id"]
+            isOneToOne: false
+            referencedRelation: "guide_bases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "learning_visits_target_guide_base_id_fkey"
+            columns: ["target_guide_base_id"]
+            isOneToOne: false
+            referencedRelation: "published_guides"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "learning_visits_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "dashboard_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "learning_visits_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -1442,6 +2011,55 @@ export type Database = {
       }
     }
     Functions: {
+      analytics_cleanup: { Args: { p_batch_size?: number }; Returns: Json }
+      analytics_ingest: {
+        Args: {
+          p_enabled?: boolean
+          p_events: Json
+          p_server?: boolean
+          p_user_id?: string
+        }
+        Returns: Json
+      }
+      analytics_metric: {
+        Args: {
+          p_definition: string
+          p_key: string
+          p_label: string
+          p_reason?: string
+          p_unit: string
+          p_value: number
+        }
+        Returns: Json
+      }
+      analytics_observed: {
+        Args: { p_from: string; p_to: string }
+        Returns: boolean
+      }
+      analytics_report: {
+        Args: { p_from: string; p_to: string }
+        Returns: Json
+      }
+      analytics_report_events: {
+        Args: { p_from: string; p_to: string }
+        Returns: {
+          anonymous_count: number
+          day: string
+          event_count: number
+          guide_base_id: string
+          name: string
+          objective_id: string
+          source: string
+        }[]
+      }
+      analytics_return_cohort: {
+        Args: { p_days: number; p_from: string; p_to: string }
+        Returns: Json
+      }
+      analytics_set_collection: {
+        Args: { p_enabled: boolean }
+        Returns: undefined
+      }
       assemble_review_panel: {
         Args: { p_case_id: string; p_policy_default: number }
         Returns: string
@@ -1499,6 +2117,46 @@ export type Database = {
         Returns: boolean
       }
       is_active_guide_author: { Args: never; Returns: boolean }
+      learning_history_state: {
+        Args: {
+          p_action: string
+          p_input?: Json
+          p_limit?: number
+          p_page?: number
+        }
+        Returns: Json
+      }
+      learning_lock_user: { Args: never; Returns: string }
+      learning_objective_state: {
+        Args: { p_action?: string; p_input?: Json; p_slug: string }
+        Returns: Json
+      }
+      learning_objective_view: {
+        Args: { p_objective: string; p_user: string }
+        Returns: Json
+      }
+      learning_objectives_state: {
+        Args: { p_limit?: number; p_page?: number }
+        Returns: Json
+      }
+      learning_preferences_state: { Args: { p_patch?: Json }; Returns: Json }
+      learning_public_completions: {
+        Args: { p_username: string }
+        Returns: Json
+      }
+      learning_read_state: {
+        Args: {
+          p_guide_id?: string
+          p_guide_ids?: string[]
+          p_read?: boolean
+          p_revision_id?: string
+        }
+        Returns: Json
+      }
+      learning_validate_reader: {
+        Args: { p_guide: string; p_revision: string }
+        Returns: string
+      }
       list_guide_variants_by_score: {
         Args: { p_guide_base_id: string; p_z?: number }
         Returns: {
@@ -1619,12 +2277,12 @@ export type Tables<
   DefaultSchemaTableNameOrOptions extends
     | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends (DefaultSchemaTableNameOrOptions extends {
+  TableName extends DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
         DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
-    : never) = never,
+    : never = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -1648,11 +2306,11 @@ export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends (DefaultSchemaTableNameOrOptions extends {
+  TableName extends DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never) = never,
+    : never = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -1673,11 +2331,11 @@ export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends (DefaultSchemaTableNameOrOptions extends {
+  TableName extends DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never) = never,
+    : never = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -1698,11 +2356,11 @@ export type Enums<
   DefaultSchemaEnumNameOrOptions extends
     | keyof DefaultSchema["Enums"]
     | { schema: keyof DatabaseWithoutInternals },
-  EnumName extends (DefaultSchemaEnumNameOrOptions extends {
+  EnumName extends DefaultSchemaEnumNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
-    : never) = never,
+    : never = never,
 > = DefaultSchemaEnumNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -1715,11 +2373,11 @@ export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
     | keyof DefaultSchema["CompositeTypes"]
     | { schema: keyof DatabaseWithoutInternals },
-  CompositeTypeName extends (PublicCompositeTypeNameOrOptions extends {
+  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
-    : never) = never,
+    : never = never,
 > = PublicCompositeTypeNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }

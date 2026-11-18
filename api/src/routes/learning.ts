@@ -1,0 +1,298 @@
+import { Hono } from "hono";
+import { describeRoute } from "hono-openapi";
+import { z } from "zod";
+import {
+  learningPreferencesSchema,
+  updateLearningPreferencesSchema,
+  recordLearningHistorySchema,
+  learningHistoryResponseSchema,
+  learningReadsQuerySchema,
+  learningReadsResponseSchema,
+  updateLearningReadSchema,
+  learningReadResponseSchema,
+  learningObjectivesResponseSchema,
+  learningObjectiveStateSchema,
+  learningObjectiveActionSchema,
+  learningObjectiveActionInputSchema,
+  learningObjectivePositionSchema,
+  publicLearningResponseSchema,
+  paginationSchema,
+} from "@bluelearn/schemas";
+import { errorResponses, jsonContent, validate } from "../lib/openapi";
+import { getServiceSupabase, requireUser } from "../middleware/auth.middleware";
+import { rateLimitMiddleware } from "../middleware/rate-limit.middleware";
+import { learningResult } from "../services/learning.service";
+import { emitLearningTransition } from "../services/analytics.service";
+import type { HonoEnv } from "../types";
+
+const guideParam = z.object({ guideId: z.uuid() });
+const slugParam = z.object({ slug: z.string().min(1).max(200) });
+const actionParam = slugParam.extend({ action: learningObjectiveActionSchema });
+const okSchema = z.object({ ok: z.literal(true) });
+const recordedSchema = z.object({ recorded: z.boolean() });
+const writeLimit = rateLimitMiddleware({
+  windowSeconds: 60,
+  max: 120,
+  bucket: "learning-write",
+});
+const description = (summary: string, schema: z.ZodType) =>
+  describeRoute({
+    tags: ["Learning"],
+    summary,
+    responses: {
+      200: jsonContent(schema, summary),
+      ...errorResponses(400, 401, 403, 404, 409, 500),
+    },
+  });
+
+export const learningRouter = new Hono<HonoEnv>()
+  .get(
+    "/public/:username",
+    description(
+      "Get public objective achievements",
+      publicLearningResponseSchema
+    ),
+    validate("param", z.object({ username: z.string().min(1).max(100) })),
+    async (c) => {
+      return c.json(
+        learningResult(
+          await c.get("supabase").rpc("learning_public_completions", {
+            p_username: c.req.valid("param").username,
+          }),
+          publicLearningResponseSchema
+        )
+      );
+    }
+  )
+  .use(requireUser)
+  .get(
+    "/preferences",
+    description("Get private learning preferences", learningPreferencesSchema),
+    async (c) => {
+      return c.json(
+        learningResult(
+          await c.get("supabase").rpc("learning_preferences_state"),
+          learningPreferencesSchema
+        )
+      );
+    }
+  )
+  .patch(
+    "/preferences",
+    description("Save private learning preferences", learningPreferencesSchema),
+    writeLimit,
+    validate("json", updateLearningPreferencesSchema),
+    async (c) => {
+      return c.json(
+        learningResult(
+          await c.get("supabase").rpc("learning_preferences_state", {
+            p_patch: c.req.valid("json"),
+          }),
+          learningPreferencesSchema
+        )
+      );
+    }
+  )
+  .post(
+    "/history",
+    description("Record a visible published reader visit", recordedSchema),
+    writeLimit,
+    validate("json", recordLearningHistorySchema),
+    async (c) => {
+      return c.json(
+        learningResult(
+          await c.get("supabase").rpc("learning_history_state", {
+            p_action: "record",
+            p_input: c.req.valid("json"),
+          }),
+          recordedSchema
+        )
+      );
+    }
+  )
+  .get(
+    "/history",
+    description(
+      "List private visits retained for ninety days",
+      learningHistoryResponseSchema
+    ),
+    validate("query", paginationSchema),
+    async (c) => {
+      const { page, limit } = c.req.valid("query");
+      return c.json(
+        learningResult(
+          await c.get("supabase").rpc("learning_history_state", {
+            p_action: "list",
+            p_page: page,
+            p_limit: limit,
+          }),
+          learningHistoryResponseSchema
+        )
+      );
+    }
+  )
+  .delete(
+    "/history/:guideId",
+    description("Remove one private visit", okSchema),
+    writeLimit,
+    validate("param", guideParam),
+    async (c) => {
+      return c.json(
+        learningResult(
+          await c.get("supabase").rpc("learning_history_state", {
+            p_action: "remove",
+            p_input: { guide_id: c.req.valid("param").guideId },
+          }),
+          okSchema
+        )
+      );
+    }
+  )
+  .delete(
+    "/history",
+    description("Clear private visits without removing progress", okSchema),
+    writeLimit,
+    async (c) => {
+      return c.json(
+        learningResult(
+          await c
+            .get("supabase")
+            .rpc("learning_history_state", { p_action: "clear" }),
+          okSchema
+        )
+      );
+    }
+  )
+  .get(
+    "/reads",
+    description(
+      "Get private read marks for up to one hundred variants",
+      learningReadsResponseSchema
+    ),
+    validate("query", learningReadsQuerySchema),
+    async (c) => {
+      return c.json(
+        learningResult(
+          await c.get("supabase").rpc("learning_read_state", {
+            p_guide_ids: c.req.valid("query").guide_ids,
+          }),
+          learningReadsResponseSchema
+        )
+      );
+    }
+  )
+  .put(
+    "/reads/:guideId",
+    description(
+      "Set the desired read state for the displayed revision",
+      learningReadResponseSchema
+    ),
+    writeLimit,
+    validate("param", guideParam),
+    validate("json", updateLearningReadSchema),
+    async (c) => {
+      const input = c.req.valid("json");
+      const result = await c.get("supabase").rpc("learning_read_state", {
+        p_guide_id: c.req.valid("param").guideId,
+        p_revision_id: input.revision_id,
+        p_read: input.read,
+      });
+      const response = learningResult(result, learningReadResponseSchema);
+      await emitLearningTransition(
+        getServiceSupabase(c),
+        c.env,
+        c.get("user").id,
+        result.data
+      );
+      return c.json(response);
+    }
+  )
+  .get(
+    "/objectives",
+    description(
+      "List private objective enrollments",
+      learningObjectivesResponseSchema
+    ),
+    validate("query", paginationSchema),
+    async (c) => {
+      const { page, limit } = c.req.valid("query");
+      return c.json(
+        learningResult(
+          await c.get("supabase").rpc("learning_objectives_state", {
+            p_page: page,
+            p_limit: limit,
+          }),
+          learningObjectivesResponseSchema
+        )
+      );
+    }
+  )
+  .get(
+    "/objectives/:slug",
+    description(
+      "Get pinned objective progress without enrolling",
+      learningObjectiveStateSchema
+    ),
+    validate("param", slugParam),
+    async (c) => {
+      return c.json(
+        learningResult(
+          await c.get("supabase").rpc("learning_objective_state", {
+            p_slug: c.req.valid("param").slug,
+          }),
+          learningObjectiveStateSchema
+        )
+      );
+    }
+  )
+  .post(
+    "/objectives/:slug/:action",
+    description(
+      "Start, resume, complete, or reopen an objective",
+      learningObjectiveStateSchema
+    ),
+    writeLimit,
+    validate("param", actionParam),
+    validate("json", learningObjectiveActionInputSchema),
+    async (c) => {
+      const { slug, action } = c.req.valid("param");
+      const result = await c.get("supabase").rpc("learning_objective_state", {
+        p_slug: slug,
+        p_action: action,
+        p_input: c.req.valid("json"),
+      });
+      const response = learningResult(result, learningObjectiveStateSchema);
+      await emitLearningTransition(
+        getServiceSupabase(c),
+        c.env,
+        c.get("user").id,
+        result.data
+      );
+      return c.json(response);
+    }
+  )
+  .patch(
+    "/objectives/:slug/position",
+    description(
+      "Save a position in an enrolled objective revision",
+      learningObjectiveStateSchema
+    ),
+    writeLimit,
+    validate("param", slugParam),
+    validate("json", learningObjectivePositionSchema),
+    async (c) => {
+      const result = await c.get("supabase").rpc("learning_objective_state", {
+        p_slug: c.req.valid("param").slug,
+        p_action: "position",
+        p_input: c.req.valid("json"),
+      });
+      const response = learningResult(result, learningObjectiveStateSchema);
+      await emitLearningTransition(
+        getServiceSupabase(c),
+        c.env,
+        c.get("user").id,
+        result.data
+      );
+      return c.json(response);
+    }
+  );

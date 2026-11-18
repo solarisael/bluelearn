@@ -54,6 +54,8 @@ function makeGuide(
 ): Guide {
   return {
     slug: "binary-search",
+    guide_base_id: "10000000-0000-4000-8000-000000000001",
+    revision_id: null,
     variant_id: null,
     variant_slug: null,
     title: "Binary search",

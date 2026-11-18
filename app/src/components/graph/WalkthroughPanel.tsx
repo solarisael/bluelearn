@@ -3,7 +3,9 @@ import { ArrowLeft, PanelLeftClose } from "lucide-react";
 import type { Objective, Walkthrough } from "@bluelearn/schemas";
 import type { BreadcrumbOrigin } from "@/lib/breadcrumbs";
 import type { ObjectiveGuideSearch } from "@/lib/objectiveSnapshot";
+import type { ReadState } from "@/components/learning/ReadStatus";
 import { Badge } from "@/components/ui/badge";
+import { ReadStatus } from "@/components/learning/ReadStatus";
 
 type GuideContext = {
   targetSlug: string;
@@ -24,6 +26,11 @@ type ObjectiveContext = {
   // The objective page opens the panel from a node click and offers a way to
   // fold it back into the rail.
   onClose?: () => void;
+  variantSlug?: string | null;
+  objectiveSearch?: ObjectiveGuideSearch;
+  readState?: ReadState;
+  hasNewerRevision?: boolean;
+  isIncluded?: boolean;
 };
 
 type WalkthroughPanelProps = {
@@ -47,7 +54,7 @@ export function WalkthroughPanel(props: WalkthroughPanelProps) {
 
     back = null;
     openSlug = props.preview ? null : props.guideSlug;
-    openSearch = { objective: props.objective.slug };
+    openSearch = { ...props.objectiveSearch, objective: props.objective.slug };
     openOrigin = {
       type: "objective",
       title,
@@ -135,13 +142,31 @@ export function WalkthroughPanel(props: WalkthroughPanelProps) {
           <p className="text-sm text-muted-foreground">{node.summary}</p>
         </div>
       )}
+      {"objective" in props && (
+        <ReadStatus state={props.readState} newer={props.hasNewerRevision} />
+      )}
+      {"objective" in props && props.isIncluded === false && (
+        <p className="text-sm text-muted-foreground">
+          Skipped · Does not count toward completion
+        </p>
+      )}
 
       {openSlug && (
         <Link
-          to="/guides/$slug"
-          params={{ slug: openSlug }}
+          to={
+            "objective" in props && props.variantSlug
+              ? "/guides/$slug/$variantSlug"
+              : "/guides/$slug"
+          }
+          params={{
+            slug: openSlug,
+            variantSlug: "objective" in props ? (props.variantSlug ?? "") : "",
+          }}
           search={openSearch}
-          state={{ breadcrumbOrigin: openOrigin }}
+          state={{
+            breadcrumbOrigin: openOrigin,
+            analyticsSource: "objective" in props ? "objective" : "guide",
+          }}
           className="btn-pri w-full"
         >
           Open Guide

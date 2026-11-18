@@ -4,6 +4,7 @@ import type {
   ObjectiveSnapshotNode,
 } from "@bluelearn/schemas";
 import type { ObjectiveContribution } from "@/types/contributions";
+import type { LearningStep } from "@/lib/api/learning";
 import { formatDate, formatDuration } from "@/lib/guideUtils";
 
 export function nodeLabel(
@@ -47,6 +48,7 @@ export function buildSubObjectives(
 export type ObjectiveGuideSearch = {
   objective?: string;
   target?: string;
+  revision?: string;
 };
 
 export function parseObjectiveGuideSearch(
@@ -56,6 +58,7 @@ export function parseObjectiveGuideSearch(
     objective:
       typeof search.objective === "string" ? search.objective : undefined,
     target: typeof search.target === "string" ? search.target : undefined,
+    revision: typeof search.revision === "string" ? search.revision : undefined,
   };
 }
 
@@ -86,7 +89,11 @@ export function guideSlugFromAnchor(hash: string) {
   return hash.startsWith("guide-") ? hash.slice("guide-".length) : undefined;
 }
 
-export type GuideNeighbour = { slug: string; title: string };
+export type GuideNeighbour = {
+  slug: string;
+  title: string;
+  variantSlug: string;
+};
 
 // The guides either side of a guide in its sub-objective's sequence, the same
 // order the linear view lists. Requests have no page, so they are skipped. A
@@ -95,24 +102,41 @@ export type GuideNeighbour = { slug: string; title: string };
 export function findGuideNeighbours(
   snapshot: Pick<ObjectiveSnapshot, "nodes" | "orders">,
   guideSlug: string,
-  targetId?: string
+  targetId?: string,
+  guideId?: string
 ) {
   const subObjectives = buildSubObjectives(snapshot);
   const holdsGuide = (steps: Array<ObjectiveSnapshotNode>) =>
-    steps.some((node) => node.slug === guideSlug);
+    steps.some(
+      (node) =>
+        node.slug === guideSlug && (!guideId || node.guide_id === guideId)
+    );
 
   const subObjective =
     subObjectives.find(
-      ({ target, steps }) => target.id === targetId && holdsGuide(steps)
+      ({ target, steps }) =>
+        (target.id === targetId || target.guide_base_id === targetId) &&
+        holdsGuide(steps)
     ) ?? subObjectives.find(({ steps }) => holdsGuide(steps));
+
   if (!subObjective) return null;
 
   const openable: Array<GuideNeighbour> = subObjective.steps.flatMap((node) =>
-    node.guide_base_id !== null && node.slug !== null
-      ? [{ slug: node.slug, title: nodeLabel(node) }]
+    node.is_included &&
+    node.guide_id !== null &&
+    node.slug !== null &&
+    node.variant_slug != null
+      ? [
+          {
+            slug: node.slug,
+            title: nodeLabel(node),
+            variantSlug: node.variant_slug,
+          },
+        ]
       : []
   );
   const index = openable.findIndex((guide) => guide.slug === guideSlug);
+
   if (index === -1) return null;
 
   return {
@@ -124,7 +148,8 @@ export function findGuideNeighbours(
 
 export function buildObjectiveFlow(
   snapshot: Pick<ObjectiveSnapshot, "nodes" | "orders">,
-  guides: Array<GuideListItem>
+  guides: Array<GuideListItem>,
+  progress?: ReadonlyArray<LearningStep>
 ) {
   const guideBySlug = new Map(guides.map((g) => [g.slug, g]));
 
@@ -135,12 +160,27 @@ export function buildObjectiveFlow(
     summary: null,
     guides: steps.map((node) => {
       const guide = node.slug ? guideBySlug.get(node.slug) : undefined;
+      const read = progress?.find(
+        (step) => step.guide_id === node.guide_id && step.guide_id !== null
+      );
+      const unavailable =
+        node.guide_base_id !== null &&
+        (node.guide_id === null || node.variant_slug == null);
+      let readState = read?.state;
+
+      if (node.guide_base_id === null) readState = "requested";
+      else if (unavailable) readState = "unavailable";
 
       return {
         guide: {
           id: node.id,
           slug: node.slug,
           isRequest: node.guide_base_id === null,
+          guideId: node.guide_id,
+          variantSlug: node.variant_slug ?? null,
+          isIncluded: node.is_included,
+          readState: node.is_included ? readState : undefined,
+          hasNewerRevision: read?.has_newer_revision ?? false,
           title: node.title ?? "Untitled guide",
           author: guide?.author,
           summary: node.summary ?? guide?.summary,
@@ -177,6 +217,8 @@ export function buildDraftObjectiveSnapshot(
       id: node.id,
       guide_base_id: node.type === "guide" ? node.guideBaseId : null,
       guide_id: null,
+      variant_slug: null,
+      guide_revision_id: null,
       slug: node.type === "guide" ? node.guideSlug : null,
       title: node.title,
       summary: node.type === "guide_request" ? node.summary : null,

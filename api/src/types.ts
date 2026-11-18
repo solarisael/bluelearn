@@ -7,6 +7,7 @@ export type Bindings = {
   TYPESENSE_PORT: string;
   TYPESENSE_PROTOCOL: string;
   TYPESENSE_API_KEY: string;
+  ANALYTICS_COLLECTION_ENABLED?: string;
   // Optional. Bound in wrangler.jsonc via durable_objects.bindings. When
   // absent (tests, fresh `wrangler dev` before the migration runs),
   // rate-limit middleware falls back to an in-memory store.

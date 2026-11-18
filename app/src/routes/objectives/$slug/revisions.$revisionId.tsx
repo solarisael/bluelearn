@@ -183,7 +183,11 @@ function RouteComponent() {
             </p>
           ) : (
             <ObjectiveFlow
-              objective={{ ...detail.revision, slug }}
+              objective={{
+                ...detail.revision,
+                slug,
+                current_revision_id: revisionId,
+              }}
               targets={targets}
               targetId={selection.targetId}
               onSelectTarget={selection.select}

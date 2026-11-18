@@ -8,8 +8,6 @@ import {
 import {
   ArrowBigDown,
   ArrowBigUp,
-  ArrowLeft,
-  ArrowRight,
   Ellipsis,
   House,
   Pencil,
@@ -21,13 +19,11 @@ import { Button } from "@/components/ui/button";
 
 import { buildBreadcrumbs } from "@/lib/breadcrumbs";
 import { getGuide } from "@/lib/api/guides";
-import { getObjective } from "@/lib/api/objectives";
+import { ApiError } from "@/lib/api/apiHelpers";
 import { buildGuideMeta } from "@/lib/guideUtils";
-import {
-  findGuideNeighbours,
-  guideAnchor,
-  parseObjectiveGuideSearch,
-} from "@/lib/objectiveSnapshot";
+import { parseObjectiveGuideSearch } from "@/lib/objectiveSnapshot";
+import { ReaderLearning } from "@/components/learning/ReaderLearning";
+import { ReaderLoadFailure } from "@/components/learning/ReaderLoadFailure";
 
 import "katex/dist/katex.min.css";
 import { GuideSidebar } from "@/components/sidebar/GuideSidebar";
@@ -50,64 +46,29 @@ import { GuideMobileMenu } from "@/components/GuideMobileMenu";
 export const Route = createFileRoute("/guides/$slug/")({
   validateSearch: parseObjectiveGuideSearch,
 
-  loaderDeps: ({ search }) => ({
-    objective: search.objective,
-    target: search.target,
-  }),
+  loader: async ({ params, abortController }) => {
+    try {
+      return {
+        guide: await getGuide(params.slug, { signal: abortController.signal }),
+      };
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 404) throw notFound();
 
-  loader: async ({ params, deps, abortController }) => {
-    const [guide, sequence] = await Promise.all([
-      getGuide(params.slug, { signal: abortController.signal }).catch(() => {
-        throw notFound();
-      }),
-      deps.objective
-        ? loadSequence(
-            deps.objective,
-            params.slug,
-            deps.target,
-            abortController.signal
-          )
-        : null,
-    ]);
-    return { guide, sequence };
+      throw error;
+    }
   },
   head: ({ loaderData }) => ({
     meta: loaderData ? buildGuideMeta(loaderData.guide) : [], // Metadata
   }),
   component: RouteComponent,
+  errorComponent: ({ error }) => <ReaderLoadFailure error={error} />,
+  notFoundComponent: () => <ReaderLoadFailure unavailable />,
 });
-
-// A missing objective, or one that does not hold this guide, just leaves the
-// reader without Prev/Next.
-async function loadSequence(
-  objectiveSlug: string,
-  guideSlug: string,
-  targetId: string | undefined,
-  signal: AbortSignal
-) {
-  try {
-    const { objective, snapshot } = await getObjective(objectiveSlug, {
-      signal,
-    });
-    const neighbours = findGuideNeighbours(snapshot, guideSlug, targetId);
-    if (!neighbours) return null;
-
-    return {
-      objective: {
-        slug: objectiveSlug,
-        title: objective.title ?? "Untitled objective",
-      },
-      ...neighbours,
-    };
-  } catch {
-    return null;
-  }
-}
 
 function RouteComponent() {
   const canAuthor = useSuspensionStatus() === "active";
   const { slug } = Route.useParams();
-  const { guide, sequence } = Route.useLoaderData();
+  const { guide } = Route.useLoaderData();
   const search = Route.useSearch();
 
   const { vote, tally, submitting, upvote, downvote, removeVote } = useVote(
@@ -136,22 +97,7 @@ function RouteComponent() {
     });
   }
 
-  const breadcrumbs = buildBreadcrumbs(
-    guide.title,
-    sequence
-      ? {
-          type: "objective",
-          title: sequence.objective.title,
-          path: `/objectives/${sequence.objective.slug}`,
-          // A target means the guide was opened from the linear view, so
-          // return to its sub-objective; from the graph, back to the graph.
-          search: search.target
-            ? { view: "linear", target: sequence.targetId }
-            : undefined,
-          hash: guideAnchor(slug),
-        }
-      : breadcrumbOrigin
-  );
+  const breadcrumbs = buildBreadcrumbs(guide.title, breadcrumbOrigin);
 
   return (
     <div className="mx-auto max-w-7xl bg-background">
@@ -315,43 +261,18 @@ function RouteComponent() {
             showToc
             isOfficial={guide.is_official}
           />
-
-          {sequence && (sequence.prev || sequence.next) && (
-            <nav
-              aria-label="Objective guides"
-              className="mt-12 mb-8 flex items-center justify-between gap-4 border-t pt-6"
-            >
-              {sequence.prev ? (
-                <Link
-                  to={Route.to}
-                  params={{ slug: sequence.prev.slug }}
-                  search={{
-                    objective: sequence.objective.slug,
-                    target: sequence.targetId,
-                  }}
-                  className="btn-outline min-w-0"
-                >
-                  <ArrowLeft className="h-4 w-4 shrink-0" />
-                  <span className="truncate">{sequence.prev.title}</span>
-                </Link>
-              ) : (
-                <span />
-              )}
-              {sequence.next && (
-                <Link
-                  to={Route.to}
-                  params={{ slug: sequence.next.slug }}
-                  search={{
-                    objective: sequence.objective.slug,
-                    target: sequence.targetId,
-                  }}
-                  className="btn-outline min-w-0"
-                >
-                  <span className="truncate">{sequence.next.title}</span>
-                  <ArrowRight className="h-4 w-4 shrink-0" />
-                </Link>
-              )}
-            </nav>
+          {guide.variant_id && guide.revision_id && guide.body !== null ? (
+            <ReaderLearning
+              guide={{
+                guideId: guide.variant_id,
+                guideBaseId: guide.guide_base_id,
+                revisionId: guide.revision_id,
+                slug,
+              }}
+              search={search}
+            />
+          ) : (
+            <ReaderLoadFailure unavailable />
           )}
         </main>
       </section>

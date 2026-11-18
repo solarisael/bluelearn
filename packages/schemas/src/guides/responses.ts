@@ -16,6 +16,8 @@ import {
 import { guideReferenceSchema, requestReferenceSchema } from "./references";
 export const guideSchema = z.object({
   slug: z.string(),
+  guide_base_id: z.uuid(),
+  revision_id: z.uuid().nullable(),
   variant_id: z.string().nullable(),
   variant_slug: z.string().nullable(),
   title: z.string(),

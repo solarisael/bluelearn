@@ -68,6 +68,7 @@ export const sharedErrorResponses: ResponsesWithResolver = {
       },
     },
   },
+  InternalServerError: jsonContent(errorSchema, "Internal server error"),
 };
 
 const BY_STATUS = {
@@ -78,6 +79,7 @@ const BY_STATUS = {
   409: "Conflict",
   422: "Unprocessable",
   429: "RateLimited",
+  500: "InternalServerError",
 } as const;
 
 export type ErrorStatus = keyof typeof BY_STATUS;
