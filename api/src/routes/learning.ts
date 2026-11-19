@@ -19,9 +19,10 @@ import {
   paginationSchema,
 } from "@bluelearn/schemas";
 import { errorResponses, jsonContent, validate } from "../lib/openapi";
-import { requireUser } from "../middleware/auth.middleware";
+import { getServiceSupabase, requireUser } from "../middleware/auth.middleware";
 import { rateLimitMiddleware } from "../middleware/rate-limit.middleware";
 import { learningResult } from "../services/learning.service";
+import { emitLearningTransition } from "../services/analytics.service";
 import type { HonoEnv } from "../types";
 
 const guideParam = z.object({ guideId: z.uuid() });
@@ -197,6 +198,12 @@ export const learningRouter = new Hono<HonoEnv>()
         p_read: input.read,
       });
       const response = learningResult(result, learningReadResponseSchema);
+      await emitLearningTransition(
+        getServiceSupabase(c),
+        c.env,
+        c.get("user").id,
+        result.data
+      );
       return c.json(response);
     }
   )
@@ -255,6 +262,12 @@ export const learningRouter = new Hono<HonoEnv>()
         p_input: c.req.valid("json"),
       });
       const response = learningResult(result, learningObjectiveStateSchema);
+      await emitLearningTransition(
+        getServiceSupabase(c),
+        c.env,
+        c.get("user").id,
+        result.data
+      );
       return c.json(response);
     }
   )
@@ -274,6 +287,12 @@ export const learningRouter = new Hono<HonoEnv>()
         p_input: c.req.valid("json"),
       });
       const response = learningResult(result, learningObjectiveStateSchema);
+      await emitLearningTransition(
+        getServiceSupabase(c),
+        c.env,
+        c.get("user").id,
+        result.data
+      );
       return c.json(response);
     }
   );

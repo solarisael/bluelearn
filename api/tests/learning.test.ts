@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
+import { z } from "zod";
 import {
   learningPreferencesSchema,
   learningHistoryResponseSchema,
@@ -22,7 +23,11 @@ import {
   createObjectiveRevision,
   createPublishedObjective,
 } from "./factories/objectives";
-import { databaseRequest, databaseRows } from "./learning-helpers";
+import {
+  collectionEnv,
+  databaseRequest,
+  databaseRows,
+} from "./learning-helpers";
 
 const users: string[] = [];
 async function learner() {
@@ -44,7 +49,7 @@ async function objectiveAction(
       expected_revision_id: revision,
       ...extra,
     }),
-    env
+    collectionEnv
   );
 }
 async function read(
@@ -56,14 +61,23 @@ async function read(
   return app.request(
     `/learning/reads/${guide}`,
     jsonAuth(token, "PUT", { revision_id: revision, read: desired }),
-    env
+    collectionEnv
   );
 }
 afterEach(async () => {
   for (const id of users.splice(0)) {
+    const linked = await databaseRows(
+      `analytics_events?user_id=eq.${id}&select=event_id`
+    );
+    const eventIds = linked.map((row) => z.string().parse(row.event_id));
     await admin.from("profiles").delete().eq("id", id).throwOnError();
     const { error } = await admin.auth.admin.deleteUser(id);
     if (error) throw error;
+    if (eventIds.length)
+      await databaseRows(
+        `analytics_event_receipts?event_id=in.(${eventIds.join(",")})`,
+        "DELETE"
+      );
   }
 });
 
@@ -106,6 +120,26 @@ describe("Private learning through the real API and Supabase", () => {
       owner.token
     );
     expect(bypass.status).toBe(403);
+    const rawEvents = await databaseRequest(
+      "analytics_events?select=*",
+      "GET",
+      undefined,
+      owner.token
+    );
+    expect(rawEvents.status).toBe(403);
+    const forged = await databaseRequest(
+      "rpc/analytics_ingest",
+      "POST",
+      {
+        p_events: [
+          { event_id: crypto.randomUUID(), name: "objective_completed" },
+        ],
+        p_enabled: true,
+        p_server: true,
+      },
+      owner.token
+    );
+    expect(forged.status).toBe(403);
   });
 
   it("returns defaults without enrollment side effects and exposes canonical revision/base identities", async () => {
@@ -414,7 +448,7 @@ describe("Private learning through the real API and Supabase", () => {
         app.request(
           `/learning/objectives/${objective.objective.slug}/complete`,
           jsonAuth(user.token, "POST", completionInput),
-          env
+          collectionEnv
         )
       )
     );
@@ -425,6 +459,11 @@ describe("Private learning through the real API and Supabase", () => {
           ?.has_newer_revision
       ).toBe(true);
     }
+    expect(
+      await databaseRows(
+        `analytics_events?user_id=eq.${user.userId}&objective_id=eq.${objective.objective.id}&name=eq.objective_completed`
+      )
+    ).toHaveLength(1);
 
     const requestedObjective = await createPublishedObjective(
       user.userId,
@@ -509,7 +548,7 @@ describe("Private learning through the real API and Supabase", () => {
       app.request(
         `/learning/objectives/${objective.objective.slug}/position`,
         jsonAuth(user.token, "PATCH", body),
-        env
+        collectionEnv
       );
     expect(
       (
@@ -569,7 +608,7 @@ describe("Private learning through the real API and Supabase", () => {
         app.request(
           `/learning/objectives/${objective.objective.slug}/resume`,
           jsonAuth(user.token, "POST", input),
-          env
+          collectionEnv
         )
       )
     );
@@ -582,13 +621,18 @@ describe("Private learning through the real API and Supabase", () => {
     expect(states[0]?.enrollment?.last_resumed_at).toBe(
       states[1]?.enrollment?.last_resumed_at
     );
+    expect(
+      await databaseRows(
+        `analytics_events?user_id=eq.${user.userId}&name=eq.objective_resumed`
+      )
+    ).toHaveLength(1);
     const changedPayload = await app.request(
       `/learning/objectives/${objective.objective.slug}/resume`,
       jsonAuth(user.token, "POST", {
         ...input,
         target_guide_base_id: guide.base.id,
       }),
-      env
+      collectionEnv
     );
     expect(changedPayload.status).toBe(409);
   });
@@ -712,5 +756,26 @@ describe("Private learning through the real API and Supabase", () => {
     expect(list.objectives[0]?.enrollment?.objective_revision_id).toBe(
       newer.id
     );
+  });
+
+  it("keeps a successful progress save when real telemetry delivery is refused", async () => {
+    const user = await learner();
+    const guide = await createPublishedGuide();
+    const response = await app.request(
+      `/learning/reads/${guide.guide.id}`,
+      jsonAuth(user.token, "PUT", {
+        revision_id: guide.revision.id,
+        read: true,
+      }),
+      { ...collectionEnv, SUPABASE_SECRET_KEY: "invalid-service-key" }
+    );
+    expect(response.status).toBe(200);
+    expect(
+      learningReadResponseSchema.parse(await response.json()).changed
+    ).toBe(true);
+    const stored = await databaseRows(
+      `learning_reads?user_id=eq.${user.userId}&guide_id=eq.${guide.guide.id}`
+    );
+    expect(stored).toHaveLength(1);
   });
 });

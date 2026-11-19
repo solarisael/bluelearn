@@ -34,6 +34,172 @@ export type Database = {
   }
   public: {
     Tables: {
+      analytics_collection_state: {
+        Row: {
+          collection_started_at: string | null
+          enabled: boolean
+          singleton: boolean
+        }
+        Insert: {
+          collection_started_at?: string | null
+          enabled?: boolean
+          singleton?: boolean
+        }
+        Update: {
+          collection_started_at?: string | null
+          enabled?: boolean
+          singleton?: boolean
+        }
+        Relationships: []
+      }
+      analytics_collection_windows: {
+        Row: {
+          ended_at: string | null
+          id: number
+          started_at: string
+        }
+        Insert: {
+          ended_at?: string | null
+          id?: never
+          started_at: string
+        }
+        Update: {
+          ended_at?: string | null
+          id?: never
+          started_at?: string
+        }
+        Relationships: []
+      }
+      analytics_daily: {
+        Row: {
+          anonymous_count: number
+          day: string
+          dimension_key: string
+          entity_type: string | null
+          error_category: string | null
+          event_count: number
+          guide_base_id: string | null
+          name: string
+          objective_id: string | null
+          source: string | null
+        }
+        Insert: {
+          anonymous_count: number
+          day: string
+          dimension_key: string
+          entity_type?: string | null
+          error_category?: string | null
+          event_count: number
+          guide_base_id?: string | null
+          name: string
+          objective_id?: string | null
+          source?: string | null
+        }
+        Update: {
+          anonymous_count?: number
+          day?: string
+          dimension_key?: string
+          entity_type?: string | null
+          error_category?: string | null
+          event_count?: number
+          guide_base_id?: string | null
+          name?: string
+          objective_id?: string | null
+          source?: string | null
+        }
+        Relationships: []
+      }
+      analytics_event_receipts: {
+        Row: {
+          event_id: string
+          received_at: string
+        }
+        Insert: {
+          event_id: string
+          received_at?: string
+        }
+        Update: {
+          event_id?: string
+          received_at?: string
+        }
+        Relationships: []
+      }
+      analytics_events: {
+        Row: {
+          entity_type: string | null
+          error_category: string | null
+          event_id: string
+          guide_base_id: string | null
+          guide_id: string | null
+          name: string
+          objective_id: string | null
+          objective_revision_id: string | null
+          received_at: string
+          result_count: number | null
+          revision_id: string | null
+          rolled_up_at: string | null
+          source: string | null
+          user_id: string | null
+          was_anonymous: boolean
+        }
+        Insert: {
+          entity_type?: string | null
+          error_category?: string | null
+          event_id: string
+          guide_base_id?: string | null
+          guide_id?: string | null
+          name: string
+          objective_id?: string | null
+          objective_revision_id?: string | null
+          received_at?: string
+          result_count?: number | null
+          revision_id?: string | null
+          rolled_up_at?: string | null
+          source?: string | null
+          user_id?: string | null
+          was_anonymous?: boolean
+        }
+        Update: {
+          entity_type?: string | null
+          error_category?: string | null
+          event_id?: string
+          guide_base_id?: string | null
+          guide_id?: string | null
+          name?: string
+          objective_id?: string | null
+          objective_revision_id?: string | null
+          received_at?: string
+          result_count?: number | null
+          revision_id?: string | null
+          rolled_up_at?: string | null
+          source?: string | null
+          user_id?: string | null
+          was_anonymous?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "analytics_events_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: true
+            referencedRelation: "analytics_event_receipts"
+            referencedColumns: ["event_id"]
+          },
+          {
+            foreignKeyName: "analytics_events_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "dashboard_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "analytics_events_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       disclaimers: {
         Row: {
           description: string | null
@@ -1845,6 +2011,55 @@ export type Database = {
       }
     }
     Functions: {
+      analytics_cleanup: { Args: { p_batch_size?: number }; Returns: Json }
+      analytics_ingest: {
+        Args: {
+          p_enabled?: boolean
+          p_events: Json
+          p_server?: boolean
+          p_user_id?: string
+        }
+        Returns: Json
+      }
+      analytics_metric: {
+        Args: {
+          p_definition: string
+          p_key: string
+          p_label: string
+          p_reason?: string
+          p_unit: string
+          p_value: number
+        }
+        Returns: Json
+      }
+      analytics_observed: {
+        Args: { p_from: string; p_to: string }
+        Returns: boolean
+      }
+      analytics_report: {
+        Args: { p_from: string; p_to: string }
+        Returns: Json
+      }
+      analytics_report_events: {
+        Args: { p_from: string; p_to: string }
+        Returns: {
+          anonymous_count: number
+          day: string
+          event_count: number
+          guide_base_id: string
+          name: string
+          objective_id: string
+          source: string
+        }[]
+      }
+      analytics_return_cohort: {
+        Args: { p_days: number; p_from: string; p_to: string }
+        Returns: Json
+      }
+      analytics_set_collection: {
+        Args: { p_enabled: boolean }
+        Returns: undefined
+      }
       assemble_review_panel: {
         Args: { p_case_id: string; p_policy_default: number }
         Returns: string

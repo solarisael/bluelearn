@@ -1,6 +1,14 @@
 import { z } from "zod";
 import { env } from "./helpers";
 
+export const collectionEnv = { ...env, ANALYTICS_COLLECTION_ENABLED: "true" };
+
+export function utcDay(offset: number) {
+  const date = new Date();
+  date.setUTCDate(date.getUTCDate() + offset);
+  return date.toISOString().slice(0, 10);
+}
+
 export function databaseRequest(
   path: string,
   method = "GET",
@@ -35,4 +43,12 @@ export async function databaseRows(
   return z
     .array(z.record(z.string(), z.unknown()))
     .parse(await response.json());
+}
+
+export async function observationWindow(from: string, to: string) {
+  const rows = await databaseRows("analytics_collection_windows", "POST", {
+    started_at: `${from}T00:00:00Z`,
+    ended_at: `${to}T23:59:59.999Z`,
+  });
+  return z.number().parse(rows[0]?.id);
 }

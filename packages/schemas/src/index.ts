@@ -11,3 +11,4 @@ export * from "./media";
 export * from "./review";
 export * from "./search";
 export * from "./learning";
+export * from "./analytics";
