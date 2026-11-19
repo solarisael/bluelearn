@@ -1,6 +1,6 @@
 import { Link, createFileRoute, useLocation } from "@tanstack/react-router";
 import { Ellipsis, House, Pencil } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import type { Breadcrumb } from "@/lib/breadcrumbs";
 import { buildBreadcrumbs } from "@/lib/breadcrumbs";
@@ -20,7 +20,11 @@ import {
 } from "@/lib/objectiveSnapshot";
 import { defaultTargetId } from "@/lib/objectiveGraph";
 import { getObjective } from "@/lib/api/objectives";
-import { getMyIdentity } from "@/lib/api/identity";
+import { useAuth } from "@/lib/authContext";
+import { getObjectiveRevision } from "@/lib/api/objectiveRevisions";
+import { useLearningObjective, useLearningResource } from "@/lib/useLearning";
+import { ObjectiveProgress } from "@/components/learning/ObjectiveProgress";
+import { LearningFailure } from "@/components/learning/ReaderLearning";
 import { listGuides } from "@/lib/api/guides";
 import { buildPageMeta } from "@/lib/seo";
 
@@ -38,12 +42,11 @@ export const Route = createFileRoute("/objectives/$slug/")({
   // moves around it; that alone must not refetch the objective.
   shouldReload: ({ cause }) => cause !== "stay",
   loader: async ({ params: { slug }, abortController }) => {
-    const [objective, guides, identity] = await Promise.all([
+    const [objective, guides] = await Promise.all([
       getObjective(slug, { signal: abortController.signal }),
       listGuides({ signal: abortController.signal }),
-      getMyIdentity({ signal: abortController.signal }).catch(() => null),
     ]);
-    return { ...objective, guides, identity };
+    return { ...objective, guides };
   },
   head: ({ loaderData }) => {
     if (!loaderData) return { meta: [] };
@@ -178,8 +181,39 @@ function PathPage() {
 
 function ObjectivePage() {
   const { slug } = Route.useParams();
-  const { objective, snapshot, guides, identity } = Route.useLoaderData();
-  const isCurator = identity?.roles.includes("curator") ?? false;
+  const current = Route.useLoaderData();
+  const { guides } = current;
+  const { roles, rolesLoading } = useAuth();
+  const isCurator = !rolesLoading && roles.includes("curator");
+  const progress = useLearningObjective(slug);
+  const enrolledRevision = progress.data?.enrollment?.objective_revision_id;
+  const hasSavedRevision = Boolean(
+    enrolledRevision &&
+    enrolledRevision !== current.objective.current_revision_id
+  );
+  const loadRevision = useCallback(
+    (signal: AbortSignal) =>
+      getObjectiveRevision(enrolledRevision!, { signal }),
+    [enrolledRevision]
+  );
+  const savedRevision = useLearningResource(
+    hasSavedRevision ? `enrolled:${enrolledRevision}` : null,
+    loadRevision,
+    false
+  );
+  const snapshot =
+    hasSavedRevision && savedRevision.data
+      ? savedRevision.data.snapshot
+      : current.snapshot;
+  const objective =
+    hasSavedRevision && savedRevision.data
+      ? {
+          ...current.objective,
+          title: savedRevision.data.revision.title,
+          summary: savedRevision.data.revision.summary,
+          current_revision_id: enrolledRevision!,
+        }
+      : current.objective;
 
   const search = Route.useSearch();
   const navigate = Route.useNavigate();
@@ -190,9 +224,30 @@ function ObjectivePage() {
   // The URL only seeds the page; from then on the page owns its state and
   // mirrors it back below.
   const [view, setView] = useState<"graph" | "linear">(search.view ?? "graph");
+  const requestedTarget = snapshot.nodes.find(
+    (node) =>
+      (node.id === search.target || node.guide_base_id === search.target) &&
+      node.is_target &&
+      node.is_included
+  );
   const selection = useObjectiveSelection(snapshot, {
-    targetId: search.target,
+    targetId:
+      requestedTarget?.id ?? progress.data?.enrollment?.target_guide_base_id,
   });
+  const selectedTarget = snapshot.nodes.find(
+    (node) => node.id === selection.targetId
+  );
+  const selectedTargetBaseId =
+    hasSavedRevision && !savedRevision.data
+      ? undefined
+      : (selectedTarget?.guide_base_id ?? undefined);
+  const reopenTargetBaseId =
+    current.snapshot.nodes.find(
+      (node) =>
+        node.guide_base_id === selectedTargetBaseId &&
+        node.is_target &&
+        node.is_included
+    )?.guide_base_id ?? undefined;
 
   // Back from a guide opened on the graph, its node opens again. The hash
   // never reaches the server, so this waits for the browser to hydrate.
@@ -243,8 +298,8 @@ function ObjectivePage() {
 
   // Memoized so a target change does not rebuild, and remount, the stepper.
   const { targets } = useMemo(
-    () => buildObjectiveFlow(snapshot, guides),
-    [snapshot, guides]
+    () => buildObjectiveFlow(snapshot, guides, progress.data?.steps),
+    [snapshot, guides, progress.data?.steps]
   );
 
   return (
@@ -259,8 +314,8 @@ function ObjectivePage() {
                 variant="outline"
                 size="lg"
                 onClick={() =>
-                  setView((current) =>
-                    current === "graph" ? "linear" : "graph"
+                  setView((previousView) =>
+                    previousView === "graph" ? "linear" : "graph"
                   )
                 }
               >
@@ -287,7 +342,23 @@ function ObjectivePage() {
         </>
       }
     >
-      {targets.length === 0 ? (
+      <ObjectiveProgress
+        slug={slug}
+        progress={progress}
+        targetGuideBaseId={selectedTargetBaseId}
+        reopenTargetGuideBaseId={reopenTargetBaseId}
+      />
+      <LearningFailure
+        error={savedRevision.error}
+        refresh={savedRevision.refresh}
+      />
+      {hasSavedRevision && (savedRevision.loading || savedRevision.error) ? (
+        <p className="text-sm text-muted-foreground">
+          {savedRevision.loading
+            ? "Loading enrolled revision..."
+            : "The enrolled revision could not be loaded."}
+        </p>
+      ) : targets.length === 0 ? (
         <p className="text-sm text-muted-foreground">
           This objective has no sub-objectives yet.
         </p>
@@ -296,6 +367,9 @@ function ObjectivePage() {
           objective={{ slug, title: objective.title }}
           snapshot={snapshot}
           guides={guides}
+          learningSteps={progress.data?.steps}
+          revisionId={objective.current_revision_id ?? undefined}
+          targetId={selection.targetId}
           selectedId={selection.selectedId}
           onSelect={selection.select}
         />

@@ -56,7 +56,7 @@ function HistoryPage() {
           onClick={() => {
             if (
               !window.confirm(
-                "Clear all reading history? Read marks stay saved."
+                "Clear all reading history? Read marks and objective progress stay saved."
               )
             )
               return;

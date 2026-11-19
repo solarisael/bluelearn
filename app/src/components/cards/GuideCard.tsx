@@ -1,5 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import type { AnalyticsSource, BreadcrumbOrigin } from "@/lib/breadcrumbs";
+import type { ObjectiveGuideSearch } from "@/lib/objectiveSnapshot";
 import type { Route as GuideRoute } from "@/routes/guides/$slug/index";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -24,11 +25,21 @@ type PropTypes = {
   guide: GuideProp;
   to?: typeof GuideRoute.to;
   origin?: BreadcrumbOrigin;
+  variantSlug?: string;
   source?: AnalyticsSource;
-  search?: { objective?: string; target?: string };
+  readStatus?: "read" | "unread" | "requested" | "unavailable";
+  search?: ObjectiveGuideSearch;
 };
 
-export const GuideCard = ({ guide, to, origin, search, source }: PropTypes) => {
+export const GuideCard = ({
+  guide,
+  to,
+  origin,
+  search,
+  variantSlug,
+  source,
+  readStatus,
+}: PropTypes) => {
   const card = (
     <Card className="group h-full rounded-md bg-background shadow-none transition-colors hover:bg-muted">
       <CardHeader className="relative p-4">
@@ -36,6 +47,11 @@ export const GuideCard = ({ guide, to, origin, search, source }: PropTypes) => {
           <p className="font-mono text-xs tracking-wide text-muted-foreground uppercase">
             {guide.isRequest ? "Guide request" : "Guide"}
           </p>
+          {readStatus && (
+            <Badge variant="outline" className="capitalize">
+              {readStatus}
+            </Badge>
+          )}
           {guide.status && (
             <Badge
               variant="default"
@@ -86,8 +102,8 @@ export const GuideCard = ({ guide, to, origin, search, source }: PropTypes) => {
   }
   return (
     <Link
-      to={to}
-      params={{ slug: guide.slug }}
+      to={variantSlug ? "/guides/$slug/$variantSlug" : to}
+      params={{ slug: guide.slug, ...(variantSlug && { variantSlug }) }}
       search={search}
       state={{
         breadcrumbOrigin: origin,

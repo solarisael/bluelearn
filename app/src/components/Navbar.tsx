@@ -25,6 +25,7 @@ const navItems: Array<{ label: string; to: string }> = [
 
 // Profile isn't here because its link needs the signed-in username.
 const profileItems = [
+  { label: "Continue learning", to: "/learning" },
   { label: "History", to: "/history" },
   { label: "Settings", to: "/settings" },
 ];

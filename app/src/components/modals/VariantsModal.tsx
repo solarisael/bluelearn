@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { getGuideVariants } from "@/lib/api/guides";
 import { formatDate } from "@/lib/guideUtils";
 import { useSuspensionStatus } from "@/lib/authContext";
+import { parseObjectiveGuideSearch } from "@/lib/objectiveSnapshot";
 import { analyticsSource } from "@/lib/telemetry";
 
 type PropsTypes = {
@@ -23,6 +24,7 @@ export const VariantsModal = ({
 }: PropsTypes) => {
   const canAuthor = useSuspensionStatus() === "active";
   const location = useLocation();
+  const objectiveSearch = parseObjectiveGuideSearch(location.search);
   const source = analyticsSource(location.state.analyticsSource ?? "guide");
   const [variants, setVariants] = useState<Array<GuideVariantListItem>>([]);
   const [loading, setLoading] = useState(false);
@@ -92,6 +94,7 @@ export const VariantsModal = ({
             key={variant.id || variant.slug}
             to="/guides/$slug/$variantSlug"
             params={{ slug, variantSlug: variant.slug }}
+            search={objectiveSearch}
             state={{
               breadcrumbOrigin: location.state.breadcrumbOrigin,
               analyticsSource: source,

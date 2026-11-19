@@ -52,6 +52,26 @@ function LearningSettings() {
           </Link>
         </p>
       </div>
+      <div className="space-y-2">
+        <label className="flex items-center gap-3 font-semibold">
+          <input
+            type="checkbox"
+            checked={data?.show_completed_objectives ?? false}
+            disabled={disabled}
+            onChange={(event) => {
+              const show_completed_objectives = event.currentTarget.checked;
+              void mutation.run(() =>
+                updateLearningPreferences({ show_completed_objectives })
+              );
+            }}
+          />
+          Share completed objectives
+        </label>
+        <p className="text-sm text-muted-foreground">
+          Show completions on your profile. History and unfinished progress stay
+          private.
+        </p>
+      </div>
       {mutation.pending && <p role="status">Saving preferences...</p>}
     </section>
   );

@@ -5,23 +5,94 @@ import {
   useRouter,
   useRouterState,
 } from "@tanstack/react-router";
+import type { ObjectiveGuideSearch } from "@/lib/objectiveSnapshot";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/authContext";
-import { recordLearningVisit, setLearningRead } from "@/lib/api/learning";
+import { getObjective } from "@/lib/api/objectives";
+import { getObjectiveRevision } from "@/lib/api/objectiveRevisions";
+import {
+  recordLearningVisit,
+  saveLearningPosition,
+  setLearningRead,
+} from "@/lib/api/learning";
 import {
   learningErrorCategory,
   learningErrorMessage,
   useLearningMutation,
+  useLearningObjective,
   useLearningReads,
+  useLearningResource,
 } from "@/lib/useLearning";
+import { findGuideNeighbours } from "@/lib/objectiveSnapshot";
 import { analyticsSource, newAnalyticsEventId } from "@/lib/telemetry";
+import { queueLearningPosition } from "@/lib/learningPositionQueue";
 
 export type DisplayedGuide = {
   guideId: string;
+  guideBaseId: string;
   revisionId: string;
+  slug: string;
 };
 
-function useReaderOpen(guide: DisplayedGuide) {
+function useReaderObjectiveContext(
+  guide: DisplayedGuide,
+  search: ObjectiveGuideSearch
+) {
+  const progress = useLearningObjective(search.objective);
+  const revision =
+    search.revision ?? progress.data?.enrollment?.objective_revision_id;
+  const load = useCallback(
+    async (signal: AbortSignal) => {
+      const current = await getObjective(search.objective!, { signal });
+      const detail =
+        revision && revision !== current.objective.current_revision_id
+          ? await getObjectiveRevision(revision, { signal })
+          : current;
+
+      return { ...current, snapshot: detail.snapshot };
+    },
+    [search.objective, revision]
+  );
+  const sequence = useLearningResource(
+    search.objective && !progress.loading
+      ? `sequence:${search.objective}:${revision ?? "current"}`
+      : null,
+    load,
+    false
+  );
+  const snapshot = sequence.data?.snapshot;
+  const neighbours = snapshot
+    ? findGuideNeighbours(snapshot, guide.slug, search.target, guide.guideId)
+    : null;
+  const selectedTarget = search.target
+    ? snapshot?.nodes.find(
+        (node) =>
+          node.is_target &&
+          node.is_included &&
+          (node.id === search.target || node.guide_base_id === search.target)
+      )
+    : undefined;
+  const target =
+    selectedTarget ??
+    snapshot?.nodes.find(
+      (node) =>
+        node.is_target &&
+        node.is_included &&
+        node.guide_base_id !== null &&
+        node.guide_base_id === progress.data?.enrollment?.target_guide_base_id
+    ) ??
+    snapshot?.nodes.find((node) => node.id === neighbours?.targetId);
+
+  return { progress, revision, sequence, snapshot, neighbours, target };
+}
+
+type ReaderObjectiveContext = ReturnType<typeof useReaderObjectiveContext>;
+
+function useReaderOpen(
+  guide: DisplayedGuide,
+  search: ObjectiveGuideSearch,
+  context: ReaderObjectiveContext
+) {
   const { user, loading } = useAuth();
   const location = useLocation();
   const navigating = useRouterState({
@@ -44,6 +115,7 @@ function useReaderOpen(guide: DisplayedGuide) {
     account: string;
     error: Error;
   } | null>(null);
+  const { progress, revision, sequence, snapshot, target } = context;
   const source = analyticsSource(
     location.state.analyticsSource ?? location.state.breadcrumbOrigin?.type
   );
@@ -74,7 +146,12 @@ function useReaderOpen(guide: DisplayedGuide) {
   }, []);
 
   useEffect(() => {
-    if (loading || navigating) return;
+    if (
+      loading ||
+      navigating ||
+      (search.objective && (progress.loading || sequence.loading))
+    )
+      return;
 
     if (visit.current?.navigation !== navigation) {
       visit.current = {
@@ -89,14 +166,31 @@ function useReaderOpen(guide: DisplayedGuide) {
 
       const current = visit.current!;
       current.sent = true;
+      const objective = sequence.data?.objective;
+      const objectiveRevision = revision ?? objective?.current_revision_id;
+      const matchingStep = snapshot?.nodes.some(
+        (node) => node.is_included && node.guide_id === guide.guideId
+      );
+      const objectiveContext =
+        matchingStep && objectiveRevision && objective
+          ? {
+              objective_id: objective.id,
+              objective_revision_id: objectiveRevision,
+            }
+          : {};
 
       if (user) {
         current.account = user.id;
+        const targetGuideBaseId = target?.guide_base_id;
         current.history = {
           event_id: current.eventId,
           guide_id: guide.guideId,
           revision_id: guide.revisionId,
           source,
+          ...objectiveContext,
+          ...(matchingStep
+            ? { target_guide_base_id: targetGuideBaseId ?? undefined }
+            : {}),
         };
         void saveHistory(current);
       }
@@ -113,6 +207,13 @@ function useReaderOpen(guide: DisplayedGuide) {
     source,
     guide.guideId,
     guide.revisionId,
+    search.objective,
+    progress.loading,
+    revision,
+    sequence.loading,
+    sequence.data,
+    snapshot,
+    target,
     saveHistory,
   ]);
 
@@ -162,14 +263,21 @@ export function LearningFailure({
   );
 }
 
-export function ReaderLearning({ guide }: { guide: DisplayedGuide }) {
+export function ReaderLearning({
+  guide,
+  search,
+}: {
+  guide: DisplayedGuide;
+  search: ObjectiveGuideSearch;
+}) {
   const router = useRouter();
   const reads = useLearningReads([guide.guideId]);
   const mutation = useLearningMutation(`${guide.guideId}:${guide.revisionId}`);
   const read = reads.data?.reads.find(
     (item) => item.guide_id === guide.guideId
   );
-  const visit = useReaderOpen(guide);
+  const objectiveContext = useReaderObjectiveContext(guide, search);
+  const visit = useReaderOpen(guide, search, objectiveContext);
 
   return (
     <section
@@ -250,6 +358,142 @@ export function ReaderLearning({ guide }: { guide: DisplayedGuide }) {
           Retry saving visit
         </Button>
       )}
+      {search.objective && (
+        <ReaderObjective
+          guide={guide}
+          search={search}
+          context={objectiveContext}
+        />
+      )}
     </section>
+  );
+}
+
+function ReaderObjective({
+  guide,
+  search,
+  context,
+}: {
+  guide: DisplayedGuide;
+  search: ObjectiveGuideSearch;
+  context: ReaderObjectiveContext;
+}) {
+  const { progress, revision, sequence, neighbours, target } = context;
+  const location = useLocation();
+  const position = useLearningMutation(
+    `${search.objective}:${progress.data?.enrollment?.objective_revision_id}:${guide.guideBaseId}:${location.pathname}${location.searchStr}`
+  );
+  const navigating = useRouterState({
+    select: (state) => state.status === "pending",
+  });
+  const account = useAuth().user?.id;
+  const saved = useRef<string | null>(null);
+  const enrollment = progress.data?.enrollment;
+  const expectedRevision = enrollment?.objective_revision_id;
+  const positionKey = `${account}:${location.pathname}${location.searchStr}:${expectedRevision}:${guide.guideBaseId}`;
+  const canSave = Boolean(
+    enrollment &&
+    !enrollment.completed_at &&
+    (!search.revision || search.revision === expectedRevision) &&
+    progress.data?.steps.some((step) => step.guide_id === guide.guideId)
+  );
+
+  const save = () =>
+    queueLearningPosition(
+      `${account}:${progress.data!.objective_id}`,
+      position.isCurrent,
+      () =>
+        position.run(() =>
+          saveLearningPosition(search.objective!, {
+            expected_revision_id: expectedRevision!,
+            guide_base_id: guide.guideBaseId,
+            target_guide_base_id: target?.guide_base_id ?? undefined,
+          })
+        )
+    );
+
+  useEffect(() => {
+    if (!canSave || navigating || progress.loading || sequence.loading) return;
+
+    const move = () => {
+      if (
+        document.visibilityState !== "visible" ||
+        saved.current === positionKey
+      )
+        return;
+
+      saved.current = positionKey;
+      void save();
+    };
+    move();
+    document.addEventListener("visibilitychange", move);
+    return () => document.removeEventListener("visibilitychange", move);
+  }, [canSave, navigating, progress.loading, sequence.loading, positionKey]);
+
+  const objectiveSearch = {
+    objective: search.objective,
+    target: neighbours?.targetId ?? search.target,
+    revision:
+      revision ?? sequence.data?.objective.current_revision_id ?? undefined,
+  };
+
+  return (
+    <div className="space-y-3">
+      <Link
+        to="/objectives/$slug"
+        params={{ slug: search.objective! }}
+        className="text-sm underline"
+      >
+        Return to {sequence.data?.objective.title ?? "objective"}
+      </Link>
+      <LearningFailure error={progress.error} refresh={progress.refresh} />
+      <LearningFailure error={sequence.error} refresh={sequence.refresh} />
+      <LearningFailure
+        error={position.error}
+        refresh={
+          learningErrorCategory(position.error) === "conflict"
+            ? progress.refresh
+            : undefined
+        }
+      />
+      {position.error &&
+        canSave &&
+        learningErrorCategory(position.error) !== "conflict" && (
+          <Button
+            variant="outline"
+            size="lg"
+            className="btn-sec"
+            disabled={position.pending}
+            onClick={() => void save()}
+          >
+            Retry saving position
+          </Button>
+        )}
+      {neighbours && (
+        <nav
+          aria-label="Objective guides"
+          className="flex flex-wrap justify-between gap-3"
+        >
+          {[
+            { node: neighbours.prev, label: "Previous" },
+            { node: neighbours.next, label: "Next" },
+          ].map(
+            ({ node, label }) =>
+              node && (
+                <Link
+                  key={label}
+                  to="/guides/$slug/$variantSlug"
+                  params={{ slug: node.slug, variantSlug: node.variantSlug }}
+                  search={objectiveSearch}
+                  state={{ analyticsSource: "objective" }}
+                  className="btn-outline"
+                >
+                  {label}: {node.title}
+                </Link>
+              )
+          )}
+        </nav>
+      )}
+    </div>
   );
 }

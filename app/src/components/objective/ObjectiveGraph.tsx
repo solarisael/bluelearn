@@ -5,17 +5,21 @@ import type {
   Objective,
   ObjectiveSnapshot,
 } from "@bluelearn/schemas";
+import type { LearningStep } from "@/lib/api/learning";
 import { GuideGraph } from "@/components/graph/GuideGraph";
-import { WalkthroughNode } from "@/components/graph/WalkthroughNode";
+import { ObjectiveLearningNode } from "@/components/objective/ObjectiveLearningNode";
 import { WalkthroughPanel } from "@/components/graph/WalkthroughPanel";
 import { buildObjectiveGraph, defaultTargetId } from "@/lib/objectiveGraph";
 
-const nodeTypes = { walkthroughNode: WalkthroughNode };
+const nodeTypes = { walkthroughNode: ObjectiveLearningNode };
 
 type ObjectiveGraphProps = {
   objective: Pick<Objective, "slug" | "title">;
   snapshot: ObjectiveSnapshot;
   guides: Array<GuideListItem>;
+  learningSteps?: ReadonlyArray<LearningStep>;
+  revisionId?: string;
+  targetId?: string | null;
   // Owned by the page so a switch to the linear view and back keeps it.
   // Null means nothing was clicked yet, so the panel stays hidden.
   selectedId: string | null;
@@ -39,19 +43,26 @@ export function useObjectiveSelection(
     initial.targetId ?? null
   );
 
-  const isTarget = (id: string) =>
-    snapshot.nodes.some(
-      (node) => node.id === id && node.is_included && node.is_target
-    );
+  const targetNode = (id: string | null | undefined) => {
+    if (!id) return undefined;
 
+    return snapshot.nodes.find(
+      (node) =>
+        (node.id === id || node.guide_base_id === id) &&
+        node.is_included &&
+        node.is_target
+    );
+  };
   const targetId =
-    chosenTargetId !== null && isTarget(chosenTargetId)
-      ? chosenTargetId
-      : defaultTargetId(snapshot);
+    targetNode(chosenTargetId)?.id ??
+    targetNode(initial.targetId)?.id ??
+    defaultTargetId(snapshot);
 
   const select = (id: string | null) => {
     setSelectedId(id);
-    if (id !== null && isTarget(id)) setChosenTargetId(id);
+    const target = targetNode(id);
+
+    if (target) setChosenTargetId(target.id);
   };
 
   return { selectedId, targetId, select };
@@ -61,6 +72,9 @@ export function ObjectiveGraph({
   objective,
   snapshot,
   guides,
+  learningSteps,
+  revisionId,
+  targetId,
   selectedId,
   onSelect,
   preview = false,
@@ -77,14 +91,30 @@ export function ObjectiveGraph({
     walkthrough.nodes.find((node) => node.id === selectedId) ??
     walkthrough.nodes.find((node) => node.id === defaultId);
   const selectedNodeId = selectedNode?.id;
+  const readsByGuide = useMemo(
+    () => new Map(learningSteps?.map((step) => [step.guide_id, step])),
+    [learningSteps]
+  );
 
   const getNodeState = useCallback(
-    (id: string) => ({
-      isSelected: id === selectedNodeId,
-      isTarget: nodes.get(id)!.isTarget,
-      isRequest: nodes.get(id)!.isRequest,
-    }),
-    [selectedNodeId, nodes]
+    (id: string) => {
+      const node = nodes.get(id)!;
+      const read = node.guideId ? readsByGuide.get(node.guideId) : undefined;
+      let readState = read?.state;
+
+      if (node.isRequest) readState = "requested";
+      else if (node.guideSlug === null) readState = "unavailable";
+
+      return {
+        isSelected: id === selectedNodeId,
+        isTarget: node.isTarget,
+        isRequest: node.isRequest,
+        isIncluded: node.isIncluded,
+        readState: node.isIncluded ? readState : undefined,
+        hasNewerRevision: read?.has_newer_revision,
+      };
+    },
+    [selectedNodeId, nodes, readsByGuide]
   );
 
   useEffect(() => {
@@ -107,6 +137,7 @@ export function ObjectiveGraph({
   }
 
   const selected = nodes.get(selectedNode.id)!;
+  const selectedLearning = getNodeState(selectedNode.id);
   // Closed, the panel folds into a rail; the rail opens on the default node.
   const isOpen = selectedId !== null;
 
@@ -124,6 +155,15 @@ export function ObjectiveGraph({
           objective={objective}
           guideSlug={selected.guideSlug}
           isRequest={selected.isRequest}
+          variantSlug={selected.variantSlug}
+          objectiveSearch={{
+            objective: objective.slug,
+            target: targetId ?? undefined,
+            revision: revisionId,
+          }}
+          readState={selectedLearning.readState}
+          hasNewerRevision={selectedLearning.hasNewerRevision}
+          isIncluded={selected.isIncluded}
           preview={preview}
           onClose={() => onSelect(null)}
         />

@@ -16,14 +16,16 @@ import {
   createRouter,
 } from "@tanstack/react-router";
 import { GuideSidebar } from "@/components/sidebar/GuideSidebar";
+import { parseObjectiveGuideSearch } from "@/lib/objectiveSnapshot";
 
 afterEach(cleanup);
 
-it("keeps attribution when a reader jumps to a heading", async () => {
+it("keeps objective context and attribution when a reader jumps to a heading", async () => {
   const root = createRootRoute({ component: Outlet });
   const guide = createRoute({
     getParentRoute: () => root,
     path: "/guides/$slug/$variantSlug",
+    validateSearch: parseObjectiveGuideSearch,
     component: () => (
       <GuideSidebar
         slug="loops"
@@ -45,7 +47,9 @@ it("keeps attribution when a reader jumps to a heading", async () => {
     ),
   });
   const history = createMemoryHistory({
-    initialEntries: ["/guides/loops/original"],
+    initialEntries: [
+      "/guides/loops/original?objective=programming&target=target-id&revision=revision-id",
+    ],
   });
   history.replace(history.location.href, { analyticsSource: "objective" });
   const router = createRouter({
@@ -62,5 +66,10 @@ it("keeps attribution when a reader jumps to a heading", async () => {
     expect(router.state.location.hash).toBe("loop-boundaries")
   );
   expect(router.state.location.pathname).toBe("/guides/loops/original");
+  expect(router.state.location.search).toEqual({
+    objective: "programming",
+    target: "target-id",
+    revision: "revision-id",
+  });
   expect(router.state.location.state.analyticsSource).toBe("objective");
 });

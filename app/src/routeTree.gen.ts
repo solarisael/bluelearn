@@ -19,6 +19,7 @@ import { Route as RegisterRouteImport } from './routes/register'
 import { Route as ProfileRouteImport } from './routes/profile'
 import { Route as ObjectivesRouteImport } from './routes/objectives'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as LearningRouteImport } from './routes/learning'
 import { Route as HistoryRouteImport } from './routes/history'
 import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
 import { Route as DashboardRouteImport } from './routes/dashboard'
@@ -99,6 +100,11 @@ const ObjectivesRoute = ObjectivesRouteImport.update({
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LearningRoute = LearningRouteImport.update({
+  id: '/learning',
+  path: '/learning',
   getParentRoute: () => rootRouteImport,
 } as any)
 const HistoryRoute = HistoryRouteImport.update({
@@ -268,6 +274,7 @@ export interface FileRoutesByFullPath {
   '/dashboard': typeof DashboardRouteWithChildren
   '/forgot-password': typeof ForgotPasswordRoute
   '/history': typeof HistoryRoute
+  '/learning': typeof LearningRoute
   '/login': typeof LoginRoute
   '/objectives': typeof ObjectivesRouteWithChildren
   '/profile': typeof ProfileRouteWithChildren
@@ -310,6 +317,7 @@ export interface FileRoutesByTo {
   '/contribute': typeof ContributeRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/history': typeof HistoryRoute
+  '/learning': typeof LearningRoute
   '/login': typeof LoginRoute
   '/profile': typeof ProfileRouteWithChildren
   '/register': typeof RegisterRoute
@@ -348,6 +356,7 @@ export interface FileRoutesById {
   '/dashboard': typeof DashboardRouteWithChildren
   '/forgot-password': typeof ForgotPasswordRoute
   '/history': typeof HistoryRoute
+  '/learning': typeof LearningRoute
   '/login': typeof LoginRoute
   '/objectives': typeof ObjectivesRouteWithChildren
   '/profile': typeof ProfileRouteWithChildren
@@ -393,6 +402,7 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/forgot-password'
     | '/history'
+    | '/learning'
     | '/login'
     | '/objectives'
     | '/profile'
@@ -435,6 +445,7 @@ export interface FileRouteTypes {
     | '/contribute'
     | '/forgot-password'
     | '/history'
+    | '/learning'
     | '/login'
     | '/profile'
     | '/register'
@@ -472,6 +483,7 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/forgot-password'
     | '/history'
+    | '/learning'
     | '/login'
     | '/objectives'
     | '/profile'
@@ -516,6 +528,7 @@ export interface RootRouteChildren {
   DashboardRoute: typeof DashboardRouteWithChildren
   ForgotPasswordRoute: typeof ForgotPasswordRoute
   HistoryRoute: typeof HistoryRoute
+  LearningRoute: typeof LearningRoute
   LoginRoute: typeof LoginRoute
   ObjectivesRoute: typeof ObjectivesRouteWithChildren
   ProfileRoute: typeof ProfileRouteWithChildren
@@ -600,6 +613,13 @@ declare module '@tanstack/react-router' {
       path: '/login'
       fullPath: '/login'
       preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/learning': {
+      id: '/learning'
+      path: '/learning'
+      fullPath: '/learning'
+      preLoaderRoute: typeof LearningRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/history': {
@@ -955,6 +975,7 @@ const rootRouteChildren: RootRouteChildren = {
   DashboardRoute: DashboardRouteWithChildren,
   ForgotPasswordRoute: ForgotPasswordRoute,
   HistoryRoute: HistoryRoute,
+  LearningRoute: LearningRoute,
   LoginRoute: LoginRoute,
   ObjectivesRoute: ObjectivesRouteWithChildren,
   ProfileRoute: ProfileRouteWithChildren,

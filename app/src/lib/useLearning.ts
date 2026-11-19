@@ -1,7 +1,44 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "@/lib/authContext";
-import { ApiError } from "@/lib/api/apiHelpers";
-import { getLearningPreferences, getLearningReads } from "@/lib/api/learning";
+import { ApiError, collectAll } from "@/lib/api/apiHelpers";
+import {
+  getLearningObjective,
+  getLearningObjectives,
+  getLearningPreferences,
+  getLearningReads,
+} from "@/lib/api/learning";
+
+type LearningOverview = Awaited<
+  ReturnType<typeof getLearningObjectives>
+>["objectives"];
+let pendingOverview:
+  | {
+      owner: string;
+      promise: Promise<LearningOverview>;
+      controller: AbortController;
+    }
+  | undefined;
+
+function loadLearningOverview(owner: string): Promise<LearningOverview> {
+  if (pendingOverview?.owner === owner) return pendingOverview.promise;
+
+  pendingOverview?.controller.abort();
+
+  const controller = new AbortController();
+
+  const promise = collectAll<LearningOverview[number]>(async (query) => {
+    const data = await getLearningObjectives(
+      { page: Number(query.page), limit: Number(query.limit) },
+      { signal: controller.signal }
+    );
+    return { items: data.objectives, total: data.total };
+  }).finally(() => {
+    if (pendingOverview?.promise === promise) pendingOverview = undefined;
+  });
+  pendingOverview = { owner, promise, controller };
+
+  return promise;
+}
 
 export function learningErrorCategory(error: unknown) {
   if (!(error instanceof ApiError)) return "network" as const;
@@ -20,6 +57,8 @@ export function learningErrorMessage(error: unknown) {
 }
 
 export function refreshLearning() {
+  pendingOverview?.controller.abort();
+  pendingOverview = undefined;
   window.dispatchEvent(new Event("bluelearn:learning-changed"));
 }
 
@@ -94,6 +133,21 @@ export function useLearningPreferences() {
     []
   );
   return useLearningResource("preferences", load);
+}
+
+export function useLearningObjective(slug?: string) {
+  const load = useCallback(
+    (signal: AbortSignal) => getLearningObjective(slug!, { signal }),
+    [slug]
+  );
+  return useLearningResource(slug ? `objective:${slug}` : null, load);
+}
+
+export function useLearningOverview() {
+  const { user } = useAuth();
+  const owner = user?.id;
+  const load = useCallback(() => loadLearningOverview(owner!), [owner]);
+  return useLearningResource("overview", load);
 }
 
 export function useLearningReads(guideIds: Array<string>) {

@@ -1,8 +1,7 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { useMemo, useState } from "react";
-import type { ReactNode } from "react";
 import type {
   ObjectiveSnapshot,
   ObjectiveSnapshotNode,
@@ -15,34 +14,7 @@ import {
 import ObjectiveFlow from "@/components/objective/ObjectiveFlow";
 import { buildObjectiveFlow } from "@/lib/objectiveSnapshot";
 import { WalkthroughPanel } from "@/components/graph/WalkthroughPanel";
-
-// Keep link destinations visible without mounting the application router.
-vi.mock("@tanstack/react-router", () => ({
-  Link: ({
-    children,
-    to,
-    params,
-    search,
-  }: {
-    children: ReactNode;
-    to: string;
-    params?: { slug: string };
-    search?: Record<string, string | undefined>;
-  }) => {
-    const path = params ? to.replace("$slug", params.slug) : to;
-    const query = new URLSearchParams(
-      Object.entries(search ?? {}).filter(
-        (entry): entry is [string, string] => entry[1] !== undefined
-      )
-    ).toString();
-
-    return <a href={query ? `${path}?${query}` : path}>{children}</a>;
-  },
-}));
-
-vi.mock("@/routes/guides/$slug/index", () => ({
-  Route: { to: "/guides/$slug" },
-}));
+import { renderWithRouter } from "@/components/objective/__tests__/renderWithRouter";
 
 // xyflow needs real layout; one button per node keeps clicks, selection and
 // fullscreen reachable in jsdom.
@@ -81,7 +53,9 @@ const node = (
 ): ObjectiveSnapshotNode => ({
   id,
   guide_base_id: null,
-  guide_id: null,
+  guide_id: fields.guide_base_id ? `variant-${id}` : null,
+  variant_slug: fields.guide_base_id ? `pinned-${id}` : null,
+  guide_revision_id: fields.guide_base_id ? `revision-${id}` : null,
   slug: null,
   title: null,
   summary: null,
@@ -146,8 +120,8 @@ describe("ObjectiveGraph", () => {
     cleanup();
   });
 
-  it("starts folded into a rail and opens on the target from the rail", () => {
-    render(<Graph snapshot={snapshot} />);
+  it("starts folded into a rail and opens on the target from the rail", async () => {
+    await renderWithRouter(<Graph snapshot={snapshot} />);
 
     expect(panel()).toBeNull();
     expect(highlighted("Termination proofs")).toBe("true");
@@ -159,8 +133,8 @@ describe("ObjectiveGraph", () => {
     expect(screen.queryAllByRole("link")).toHaveLength(0);
   });
 
-  it("opens on a node click and folds back on Close panel", () => {
-    render(<Graph snapshot={snapshot} />);
+  it("opens on a node click and folds back on Close panel", async () => {
+    await renderWithRouter(<Graph snapshot={snapshot} />);
 
     fireEvent.click(screen.getByRole("button", { name: "Loops" }));
     expect(screen.getByRole("heading", { name: "Loops" })).toBeTruthy();
@@ -172,12 +146,12 @@ describe("ObjectiveGraph", () => {
     expect(highlighted("Termination proofs")).toBe("true");
   });
 
-  it("offers the guide's own page for a guide and takes it away for a request", () => {
-    render(<Graph snapshot={snapshot} />);
+  it("offers the guide's own page for a guide and takes it away for a request", async () => {
+    await renderWithRouter(<Graph snapshot={snapshot} />);
 
     fireEvent.click(screen.getByRole("button", { name: "Loops" }));
     expect(openGuide()?.getAttribute("href")).toBe(
-      "/guides/loops?objective=proofs"
+      "/guides/loops/pinned-guide?objective=proofs"
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Loop invariants" }));
@@ -188,16 +162,16 @@ describe("ObjectiveGraph", () => {
     expect(openGuide()).toBeNull();
   });
 
-  it("links nowhere in a preview, even for a guide", () => {
-    render(<Graph snapshot={snapshot} preview />);
+  it("links nowhere in a preview, even for a guide", async () => {
+    await renderWithRouter(<Graph snapshot={snapshot} preview />);
 
     fireEvent.click(screen.getByRole("button", { name: "Loops" }));
     expect(screen.getByRole("heading", { name: "Loops" })).toBeTruthy();
     expect(screen.queryAllByRole("link")).toHaveLength(0);
   });
 
-  it("leaves fullscreen on Escape", () => {
-    render(<Graph snapshot={snapshot} />);
+  it("leaves fullscreen on Escape", async () => {
+    await renderWithRouter(<Graph snapshot={snapshot} />);
     const graph = screen.getByTestId("graph");
 
     fireEvent.click(screen.getByRole("button", { name: "Toggle fullscreen" }));
@@ -290,8 +264,8 @@ describe("an objective's graph and linear views", () => {
       name
     );
 
-  it("opens both views on the featured target, not the first", () => {
-    render(<Reader />);
+  it("opens both views on the featured target, not the first", async () => {
+    await renderWithRouter(<Reader />);
     expect(panel()).toBeNull();
     expect(highlighted("Soil survey")).toBe("true");
 
@@ -299,8 +273,8 @@ describe("an objective's graph and linear views", () => {
     linearShows("Soil survey");
   });
 
-  it("keeps the chosen target while a prerequisite is inspected", () => {
-    render(<Reader />);
+  it("keeps the chosen target while a prerequisite is inspected", async () => {
+    await renderWithRouter(<Reader />);
 
     fireEvent.click(screen.getByRole("button", { name: "Tools" }));
     fireEvent.click(screen.getByRole("button", { name: "Basics" }));
@@ -321,19 +295,23 @@ describe("an objective's graph and linear views", () => {
   });
 
   describe("returning from a guide", () => {
-    it("reopens the linear view on the sub-objective it left", () => {
-      render(<Reader initialView="linear" initial={{ targetId: "tools" }} />);
+    it("reopens the linear view on the sub-objective it left", async () => {
+      await renderWithRouter(
+        <Reader initialView="linear" initial={{ targetId: "tools" }} />
+      );
       linearShows("Tools");
     });
 
-    it("reopens the graph on the guide it left", () => {
-      render(<Reader initial={{ selectedId: "basics" }} />);
+    it("reopens the graph on the guide it left", async () => {
+      await renderWithRouter(<Reader initial={{ selectedId: "basics" }} />);
       graphShows("Basics");
       expect(highlighted("Basics")).toBe("true");
     });
 
-    it("falls back to the default for a target no longer in the objective", () => {
-      render(<Reader initialView="linear" initial={{ targetId: "gone" }} />);
+    it("falls back to the default for a target no longer in the objective", async () => {
+      await renderWithRouter(
+        <Reader initialView="linear" initial={{ targetId: "gone" }} />
+      );
       linearShows("Soil survey");
     });
   });
@@ -356,8 +334,8 @@ describe("WalkthroughPanel in a guide walkthrough", () => {
   const backToLoops = () =>
     screen.getByRole("link", { name: "Back to Loops" }).getAttribute("href");
 
-  it("still opens every node it shows and returns to the target guide", () => {
-    render(
+  it("still opens every node it shows and returns to the target guide", async () => {
+    await renderWithRouter(
       <WalkthroughPanel
         node={walkthroughNode("variables", "Variables")}
         targetSlug="loops"
@@ -372,8 +350,8 @@ describe("WalkthroughPanel in a guide walkthrough", () => {
   describe("reached from a guide inside an objective", () => {
     const objectiveSearch = { objective: "proofs", target: "request-b" };
 
-    it("hands the objective back on return to the target guide", () => {
-      render(
+    it("hands the objective back on return to the target guide", async () => {
+      await renderWithRouter(
         <WalkthroughPanel
           node={walkthroughNode("loops", "Loops")}
           targetSlug="loops"
@@ -390,8 +368,8 @@ describe("WalkthroughPanel in a guide walkthrough", () => {
       );
     });
 
-    it("opens a prerequisite outside the objective's sequence", () => {
-      render(
+    it("opens a prerequisite outside the objective's sequence", async () => {
+      await renderWithRouter(
         <WalkthroughPanel
           node={walkthroughNode("variables", "Variables")}
           targetSlug="loops"

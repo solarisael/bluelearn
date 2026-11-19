@@ -9,7 +9,9 @@ const guideNode = (
 ): ObjectiveSnapshotNode => ({
   id,
   guide_base_id: `base-${id}`,
-  guide_id: null,
+  guide_id: `variant-${id}`,
+  variant_slug: `pinned-${id}`,
+  guide_revision_id: `revision-${id}`,
   slug: `slug-${id}`,
   title: `Guide ${id}`,
   summary: null,
@@ -28,6 +30,9 @@ const requestNode = (
 ): ObjectiveSnapshotNode =>
   guideNode(id, {
     guide_base_id: null,
+    guide_id: null,
+    variant_slug: null,
+    guide_revision_id: null,
     slug: null,
     title: `Request ${id}`,
     summary: `Why ${id} is needed`,
@@ -82,6 +87,9 @@ describe("buildObjectiveGraph", () => {
       guideSlug: null,
       isRequest: true,
       isTarget: true,
+      variantSlug: null,
+      guideId: null,
+      isIncluded: true,
     });
   });
 
@@ -104,6 +112,9 @@ describe("buildObjectiveGraph", () => {
       guideSlug: "slug-g",
       isRequest: false,
       isTarget: true,
+      variantSlug: "pinned-g",
+      guideId: "variant-g",
+      isIncluded: true,
     });
   });
 

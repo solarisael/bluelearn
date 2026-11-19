@@ -7,6 +7,7 @@ import type { AnalyticsSource, BreadcrumbOrigin } from "@/lib/breadcrumbs";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Footer } from "@/components/cards/Footer";
+import { ObjectiveCardProgress } from "@/components/learning/ObjectiveCardProgress";
 
 type FeaturedNode = {
   position: number;
@@ -171,6 +172,7 @@ export const ObjectiveCard = ({ objective, to, origin, source }: PropTypes) => {
           <p className="max-w-2xl text-sm text-muted-foreground">
             {objective.summary}
           </p>
+          <ObjectiveCardProgress slug={objective.slug} />
 
           <div className="flex items-center justify-between">
             <p className="mono-micro text-muted-foreground">

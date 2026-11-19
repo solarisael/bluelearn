@@ -69,6 +69,7 @@ export const GuideSidebar = ({
               <Link
                 to="."
                 hash={h.id}
+                search={(previous) => previous}
                 state={(previous) => previous}
                 className="block w-full py-1"
               >

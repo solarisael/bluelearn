@@ -8,6 +8,7 @@ import { ActivityTable } from "@/components/tables/ActivityTable";
 import { Separator } from "@/components/ui/separator";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
+import { ProfileLearning } from "@/components/learning/ProfileLearning";
 
 export const Route = createFileRoute("/profile/$username")({
   ssr: false,
@@ -137,6 +138,7 @@ function ProfilePage() {
         </div>
 
         <Separator className="mb-8 bg-border" />
+        <ProfileLearning username={username} />
 
         <ActivityTable
           activity={activity}

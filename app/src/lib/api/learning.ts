@@ -89,6 +89,80 @@ export async function setLearningRead(
   return res.json();
 }
 
+export async function getLearningObjectives(
+  { page = 1, limit = 20 }: Page = {},
+  { signal }: FetchOptions = {}
+) {
+  const res = await learning.objectives.$get(
+    { query: { page: String(page), limit: String(limit) } },
+    { init: { signal } }
+  );
+  if (!res.ok) return assertOk(res) as Promise<never>;
+
+  return res.json();
+}
+
+export async function getLearningObjective(
+  slug: string,
+  { signal }: FetchOptions = {}
+) {
+  const res = await learning.objectives[":slug"].$get(
+    { param: { slug } },
+    { init: { signal } }
+  );
+  if (!res.ok) return assertOk(res) as Promise<never>;
+
+  return res.json();
+}
+
+export async function changeLearningObjective(
+  slug: string,
+  action: "start" | "resume" | "complete" | "reopen",
+  json: InferRequestType<
+    (typeof learning.objectives)[":slug"][":action"]["$post"]
+  >["json"]
+) {
+  const res = await learning.objectives[":slug"][":action"].$post({
+    param: { slug, action },
+    json,
+  });
+  if (!res.ok) return assertOk(res) as Promise<never>;
+
+  return res.json();
+}
+
+export async function saveLearningPosition(
+  slug: string,
+  json: InferRequestType<
+    (typeof learning.objectives)[":slug"]["position"]["$patch"]
+  >["json"]
+) {
+  const res = await learning.objectives[":slug"].position.$patch({
+    param: { slug },
+    json,
+  });
+  if (!res.ok) return assertOk(res) as Promise<never>;
+
+  return res.json();
+}
+
+export async function getPublicLearning(
+  username: string,
+  { signal }: FetchOptions = {}
+) {
+  const res = await learning.public[":username"].$get(
+    { param: { username } },
+    { init: { signal } }
+  );
+  if (!res.ok) return assertOk(res) as Promise<never>;
+
+  return res.json();
+}
+
+export type LearningObjective = Awaited<
+  ReturnType<typeof getLearningObjective>
+>;
+export type LearningStep = LearningObjective["steps"][number];
 export type LearningRead = NonNullable<
   Awaited<ReturnType<typeof setLearningRead>>["read"]
 >;

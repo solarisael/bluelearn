@@ -34,9 +34,11 @@ import { GuideMobileMenu } from "@/components/GuideMobileMenu";
 import { DownvoteModal } from "@/components/modals/DownvoteModal";
 import { useVote } from "@/lib/useVote";
 import { useSuspensionStatus } from "@/lib/authContext";
+import { parseObjectiveGuideSearch } from "@/lib/objectiveSnapshot";
 import { ReaderLearning } from "@/components/learning/ReaderLearning";
 
 export const Route = createFileRoute("/guides/$slug/$variantSlug/")({
+  validateSearch: parseObjectiveGuideSearch,
   loader: async ({ params, abortController }) => {
     try {
       const variant = await getVariantBySlug(params.slug, params.variantSlug, {
@@ -56,6 +58,7 @@ function RouteComponent() {
   const canAuthor = useSuspensionStatus() === "active";
   const { slug, variantSlug } = Route.useParams();
   const { variant, current } = Route.useLoaderData();
+  const search = Route.useSearch();
 
   const { vote, tally, submitting, upvote, downvote, removeVote } = useVote(
     variant.id,
@@ -253,8 +256,11 @@ function RouteComponent() {
             <ReaderLearning
               guide={{
                 guideId: variant.id,
+                guideBaseId: variant.guide_base_id,
                 revisionId: current.id,
+                slug,
               }}
+              search={search}
             />
           ) : null}
         </main>

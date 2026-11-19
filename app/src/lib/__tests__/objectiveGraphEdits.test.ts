@@ -161,6 +161,8 @@ describe("adoptSavedSnapshot", () => {
   ) => ({
     nodes: nodes.map((n) => ({
       guide_id: null,
+      variant_slug: null,
+      guide_revision_id: null,
       slug: null,
       title: null,
       summary: null,

@@ -1,7 +1,6 @@
 import { GuideCard } from "@/components/cards/GuideCard";
 import { guideAnchor } from "@/lib/objectiveSnapshot";
-
-import { Route as GuideRoute } from "@/routes/guides/$slug/index";
+import { ReadStatus } from "@/components/learning/ReadStatus";
 
 type Props = {
   Stepper: any;
@@ -19,7 +18,10 @@ export function SubObjectiveStep({ Stepper, target, objective }: Props) {
             const step = subobjective.guide;
             // A request has no page yet, and neither does a guide whose base
             // never got a slug.
-            const canOpen = !step.isRequest && step.slug !== null;
+            const canOpen =
+              !step.isRequest &&
+              step.slug !== null &&
+              Boolean(step.guideId && step.variantSlug);
 
             const guide = {
               ...step,
@@ -47,15 +49,29 @@ export function SubObjectiveStep({ Stepper, target, objective }: Props) {
                 <div className="min-w-0 flex-1">
                   <GuideCard
                     guide={guide}
-                    to={canOpen ? GuideRoute.to : undefined}
+                    to={canOpen ? "/guides/$slug" : undefined}
+                    variantSlug={canOpen ? step.variantSlug : undefined}
                     source="objective"
-                    search={{ objective: objective.slug, target: target.id }}
+                    readStatus={step.readState}
+                    search={{
+                      objective: objective.slug,
+                      target: target.id,
+                      revision: objective.current_revision_id,
+                    }}
                     origin={{
                       type: "objective",
                       title: objective.title,
                       path: `/objectives/${objective.slug}`,
                     }}
                   />
+                  {!step.isIncluded && (
+                    <p className="text-xs text-muted-foreground">
+                      Skipped · Does not count toward completion
+                    </p>
+                  )}
+                  {step.hasNewerRevision && (
+                    <ReadStatus state={step.readState} newer />
+                  )}
                 </div>
               </li>
             );
