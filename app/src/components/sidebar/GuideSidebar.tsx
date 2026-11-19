@@ -10,7 +10,10 @@ import { Badge } from "@/components/ui/badge";
 import { extractHeadings } from "@/lib/guideUtils";
 
 type PropTypes = {
-  guide: Omit<Guide, "variant_id" | "is_official" | "requests"> & {
+  guide: Omit<
+    Guide,
+    "variant_id" | "is_official" | "requests" | "guide_base_id" | "revision_id"
+  > & {
     requests?: Array<RequestReference>;
   };
   slug: string;
@@ -63,7 +66,12 @@ export const GuideSidebar = ({
                             : 60,
               }}
             >
-              <Link to="." hash={h.id} className="block w-full py-1">
+              <Link
+                to="."
+                hash={h.id}
+                state={(previous) => previous}
+                className="block w-full py-1"
+              >
                 {h.text}
               </Link>
             </li>

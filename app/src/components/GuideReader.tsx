@@ -36,7 +36,12 @@ type ReaderTag = { id?: string; slug?: string; name: string };
 
 export type ReaderGuide = Omit<
   Guide,
-  "tags" | "variant_id" | "is_official" | "knowledge_type"
+  | "tags"
+  | "variant_id"
+  | "is_official"
+  | "knowledge_type"
+  | "guide_base_id"
+  | "revision_id"
 > & {
   tags: Array<ReaderTag>;
 };

@@ -141,7 +141,10 @@ export function WalkthroughPanel(props: WalkthroughPanelProps) {
           to="/guides/$slug"
           params={{ slug: openSlug }}
           search={openSearch}
-          state={{ breadcrumbOrigin: openOrigin }}
+          state={{
+            breadcrumbOrigin: openOrigin,
+            analyticsSource: "objective" in props ? "objective" : "guide",
+          }}
           className="btn-pri w-full"
         >
           Open Guide

@@ -28,6 +28,7 @@ import {
   guideAnchor,
   parseObjectiveGuideSearch,
 } from "@/lib/objectiveSnapshot";
+import { ReaderLearning } from "@/components/learning/ReaderLearning";
 
 import "katex/dist/katex.min.css";
 import { GuideSidebar } from "@/components/sidebar/GuideSidebar";
@@ -315,6 +316,14 @@ function RouteComponent() {
             showToc
             isOfficial={guide.is_official}
           />
+          {guide.variant_id && guide.revision_id && guide.body !== null ? (
+            <ReaderLearning
+              guide={{
+                guideId: guide.variant_id,
+                revisionId: guide.revision_id,
+              }}
+            />
+          ) : null}
 
           {sequence && (sequence.prev || sequence.next) && (
             <nav

@@ -48,6 +48,7 @@ export function SubObjectiveStep({ Stepper, target, objective }: Props) {
                   <GuideCard
                     guide={guide}
                     to={canOpen ? GuideRoute.to : undefined}
+                    source="objective"
                     search={{ objective: objective.slug, target: target.id }}
                     origin={{
                       type: "objective",

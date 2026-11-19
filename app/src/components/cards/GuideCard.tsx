@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router";
-import type { BreadcrumbOrigin } from "@/lib/breadcrumbs";
+import type { AnalyticsSource, BreadcrumbOrigin } from "@/lib/breadcrumbs";
 import type { Route as GuideRoute } from "@/routes/guides/$slug/index";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -24,10 +24,11 @@ type PropTypes = {
   guide: GuideProp;
   to?: typeof GuideRoute.to;
   origin?: BreadcrumbOrigin;
+  source?: AnalyticsSource;
   search?: { objective?: string; target?: string };
 };
 
-export const GuideCard = ({ guide, to, origin, search }: PropTypes) => {
+export const GuideCard = ({ guide, to, origin, search, source }: PropTypes) => {
   const card = (
     <Card className="group h-full rounded-md bg-background shadow-none transition-colors hover:bg-muted">
       <CardHeader className="relative p-4">
@@ -88,7 +89,10 @@ export const GuideCard = ({ guide, to, origin, search }: PropTypes) => {
       to={to}
       params={{ slug: guide.slug }}
       search={search}
-      state={{ breadcrumbOrigin: origin }}
+      state={{
+        breadcrumbOrigin: origin,
+        analyticsSource: source ?? origin?.type,
+      }}
     >
       {card}
     </Link>

@@ -321,6 +321,7 @@ function RouteComponent() {
                       key={objective.slug}
                       objective={objective}
                       to={ObjectiveRoute.to}
+                      source={q ? "search" : "direct"}
                     />
                   ))}
                 </div>
@@ -372,6 +373,9 @@ function RouteComponent() {
                                 navigate({
                                   to: "/guides/$slug/walkthrough",
                                   params: { slug: guide.slug },
+                                  state: {
+                                    analyticsSource: q ? "search" : "direct",
+                                  },
                                 });
                               }}
                             >
@@ -385,6 +389,7 @@ function RouteComponent() {
                         ),
                       }}
                       to={GuideRoute.to}
+                      source={q ? "search" : "direct"}
                     />
                   ))}
                 </div>

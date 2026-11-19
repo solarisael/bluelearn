@@ -19,6 +19,11 @@ const items = [
     to: "/settings/appearance",
     icon: Palette,
   },
+  {
+    label: "Learning",
+    to: "/settings/learning",
+    icon: Settings,
+  },
 ];
 
 export const SettingsSidebar = () => {

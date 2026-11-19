@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link } from "@tanstack/react-router";
+import { Link, useLocation } from "@tanstack/react-router";
 import { ArrowBigDown, ArrowBigUp, Check, Sparkles } from "lucide-react";
 import { BaseGuideModal } from "./BaseGuideModal";
 import type { GuideVariantListItem } from "@bluelearn/schemas";
@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { getGuideVariants } from "@/lib/api/guides";
 import { formatDate } from "@/lib/guideUtils";
 import { useSuspensionStatus } from "@/lib/authContext";
+import { analyticsSource } from "@/lib/telemetry";
 
 type PropsTypes = {
   open: boolean;
@@ -21,6 +22,8 @@ export const VariantsModal = ({
   currentVariantSlug,
 }: PropsTypes) => {
   const canAuthor = useSuspensionStatus() === "active";
+  const location = useLocation();
+  const source = analyticsSource(location.state.analyticsSource ?? "guide");
   const [variants, setVariants] = useState<Array<GuideVariantListItem>>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -89,6 +92,10 @@ export const VariantsModal = ({
             key={variant.id || variant.slug}
             to="/guides/$slug/$variantSlug"
             params={{ slug, variantSlug: variant.slug }}
+            state={{
+              breadcrumbOrigin: location.state.breadcrumbOrigin,
+              analyticsSource: source,
+            }}
             onClick={() => onOpenChange(false)}
             className={`group relative flex w-full flex-col gap-1.5 rounded-lg border p-3.5 transition-colors hover:bg-muted ${
               isCurrent

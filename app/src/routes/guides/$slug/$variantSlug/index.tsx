@@ -34,6 +34,7 @@ import { GuideMobileMenu } from "@/components/GuideMobileMenu";
 import { DownvoteModal } from "@/components/modals/DownvoteModal";
 import { useVote } from "@/lib/useVote";
 import { useSuspensionStatus } from "@/lib/authContext";
+import { ReaderLearning } from "@/components/learning/ReaderLearning";
 
 export const Route = createFileRoute("/guides/$slug/$variantSlug/")({
   loader: async ({ params, abortController }) => {
@@ -248,6 +249,14 @@ function RouteComponent() {
             showToc
             isOfficial={variant.is_official}
           />
+          {current.body !== null ? (
+            <ReaderLearning
+              guide={{
+                guideId: variant.id,
+                revisionId: current.id,
+              }}
+            />
+          ) : null}
         </main>
       </section>
     </div>

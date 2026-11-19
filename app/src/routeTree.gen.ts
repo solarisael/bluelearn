@@ -19,6 +19,7 @@ import { Route as RegisterRouteImport } from './routes/register'
 import { Route as ProfileRouteImport } from './routes/profile'
 import { Route as ObjectivesRouteImport } from './routes/objectives'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as HistoryRouteImport } from './routes/history'
 import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
 import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as ContributeRouteImport } from './routes/contribute'
@@ -32,6 +33,7 @@ import { Route as GuidesIndexRouteImport } from './routes/guides/index'
 import { Route as DashboardIndexRouteImport } from './routes/dashboard/index'
 import { Route as SubjectsSlugRouteImport } from './routes/subjects.$slug'
 import { Route as SettingsProfileRouteImport } from './routes/settings.profile'
+import { Route as SettingsLearningRouteImport } from './routes/settings.learning'
 import { Route as SettingsAppearanceRouteImport } from './routes/settings.appearance'
 import { Route as SettingsAccountRouteImport } from './routes/settings.account'
 import { Route as ReviewCaseIdRouteImport } from './routes/review.$caseId'
@@ -99,6 +101,11 @@ const LoginRoute = LoginRouteImport.update({
   path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
+const HistoryRoute = HistoryRouteImport.update({
+  id: '/history',
+  path: '/history',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ForgotPasswordRoute = ForgotPasswordRouteImport.update({
   id: '/forgot-password',
   path: '/forgot-password',
@@ -162,6 +169,11 @@ const SubjectsSlugRoute = SubjectsSlugRouteImport.update({
 const SettingsProfileRoute = SettingsProfileRouteImport.update({
   id: '/profile',
   path: '/profile',
+  getParentRoute: () => SettingsRoute,
+} as any)
+const SettingsLearningRoute = SettingsLearningRouteImport.update({
+  id: '/learning',
+  path: '/learning',
   getParentRoute: () => SettingsRoute,
 } as any)
 const SettingsAppearanceRoute = SettingsAppearanceRouteImport.update({
@@ -255,6 +267,7 @@ export interface FileRoutesByFullPath {
   '/contribute': typeof ContributeRoute
   '/dashboard': typeof DashboardRouteWithChildren
   '/forgot-password': typeof ForgotPasswordRoute
+  '/history': typeof HistoryRoute
   '/login': typeof LoginRoute
   '/objectives': typeof ObjectivesRouteWithChildren
   '/profile': typeof ProfileRouteWithChildren
@@ -274,6 +287,7 @@ export interface FileRoutesByFullPath {
   '/review/$caseId': typeof ReviewCaseIdRoute
   '/settings/account': typeof SettingsAccountRoute
   '/settings/appearance': typeof SettingsAppearanceRoute
+  '/settings/learning': typeof SettingsLearningRoute
   '/settings/profile': typeof SettingsProfileRoute
   '/subjects/$slug': typeof SubjectsSlugRoute
   '/dashboard/': typeof DashboardIndexRoute
@@ -295,6 +309,7 @@ export interface FileRoutesByTo {
   '/browse': typeof BrowseRoute
   '/contribute': typeof ContributeRoute
   '/forgot-password': typeof ForgotPasswordRoute
+  '/history': typeof HistoryRoute
   '/login': typeof LoginRoute
   '/profile': typeof ProfileRouteWithChildren
   '/register': typeof RegisterRoute
@@ -308,6 +323,7 @@ export interface FileRoutesByTo {
   '/review/$caseId': typeof ReviewCaseIdRoute
   '/settings/account': typeof SettingsAccountRoute
   '/settings/appearance': typeof SettingsAppearanceRoute
+  '/settings/learning': typeof SettingsLearningRoute
   '/settings/profile': typeof SettingsProfileRoute
   '/subjects/$slug': typeof SubjectsSlugRoute
   '/dashboard': typeof DashboardIndexRoute
@@ -331,6 +347,7 @@ export interface FileRoutesById {
   '/contribute': typeof ContributeRoute
   '/dashboard': typeof DashboardRouteWithChildren
   '/forgot-password': typeof ForgotPasswordRoute
+  '/history': typeof HistoryRoute
   '/login': typeof LoginRoute
   '/objectives': typeof ObjectivesRouteWithChildren
   '/profile': typeof ProfileRouteWithChildren
@@ -350,6 +367,7 @@ export interface FileRoutesById {
   '/review/$caseId': typeof ReviewCaseIdRoute
   '/settings/account': typeof SettingsAccountRoute
   '/settings/appearance': typeof SettingsAppearanceRoute
+  '/settings/learning': typeof SettingsLearningRoute
   '/settings/profile': typeof SettingsProfileRoute
   '/subjects/$slug': typeof SubjectsSlugRoute
   '/dashboard/': typeof DashboardIndexRoute
@@ -374,6 +392,7 @@ export interface FileRouteTypes {
     | '/contribute'
     | '/dashboard'
     | '/forgot-password'
+    | '/history'
     | '/login'
     | '/objectives'
     | '/profile'
@@ -393,6 +412,7 @@ export interface FileRouteTypes {
     | '/review/$caseId'
     | '/settings/account'
     | '/settings/appearance'
+    | '/settings/learning'
     | '/settings/profile'
     | '/subjects/$slug'
     | '/dashboard/'
@@ -414,6 +434,7 @@ export interface FileRouteTypes {
     | '/browse'
     | '/contribute'
     | '/forgot-password'
+    | '/history'
     | '/login'
     | '/profile'
     | '/register'
@@ -427,6 +448,7 @@ export interface FileRouteTypes {
     | '/review/$caseId'
     | '/settings/account'
     | '/settings/appearance'
+    | '/settings/learning'
     | '/settings/profile'
     | '/subjects/$slug'
     | '/dashboard'
@@ -449,6 +471,7 @@ export interface FileRouteTypes {
     | '/contribute'
     | '/dashboard'
     | '/forgot-password'
+    | '/history'
     | '/login'
     | '/objectives'
     | '/profile'
@@ -468,6 +491,7 @@ export interface FileRouteTypes {
     | '/review/$caseId'
     | '/settings/account'
     | '/settings/appearance'
+    | '/settings/learning'
     | '/settings/profile'
     | '/subjects/$slug'
     | '/dashboard/'
@@ -491,6 +515,7 @@ export interface RootRouteChildren {
   ContributeRoute: typeof ContributeRoute
   DashboardRoute: typeof DashboardRouteWithChildren
   ForgotPasswordRoute: typeof ForgotPasswordRoute
+  HistoryRoute: typeof HistoryRoute
   LoginRoute: typeof LoginRoute
   ObjectivesRoute: typeof ObjectivesRouteWithChildren
   ProfileRoute: typeof ProfileRouteWithChildren
@@ -575,6 +600,13 @@ declare module '@tanstack/react-router' {
       path: '/login'
       fullPath: '/login'
       preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/history': {
+      id: '/history'
+      path: '/history'
+      fullPath: '/history'
+      preLoaderRoute: typeof HistoryRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/forgot-password': {
@@ -666,6 +698,13 @@ declare module '@tanstack/react-router' {
       path: '/profile'
       fullPath: '/settings/profile'
       preLoaderRoute: typeof SettingsProfileRouteImport
+      parentRoute: typeof SettingsRoute
+    }
+    '/settings/learning': {
+      id: '/settings/learning'
+      path: '/learning'
+      fullPath: '/settings/learning'
+      preLoaderRoute: typeof SettingsLearningRouteImport
       parentRoute: typeof SettingsRoute
     }
     '/settings/appearance': {
@@ -857,6 +896,7 @@ const ReviewRouteWithChildren =
 interface SettingsRouteChildren {
   SettingsAccountRoute: typeof SettingsAccountRoute
   SettingsAppearanceRoute: typeof SettingsAppearanceRoute
+  SettingsLearningRoute: typeof SettingsLearningRoute
   SettingsProfileRoute: typeof SettingsProfileRoute
   SettingsIndexRoute: typeof SettingsIndexRoute
 }
@@ -864,6 +904,7 @@ interface SettingsRouteChildren {
 const SettingsRouteChildren: SettingsRouteChildren = {
   SettingsAccountRoute: SettingsAccountRoute,
   SettingsAppearanceRoute: SettingsAppearanceRoute,
+  SettingsLearningRoute: SettingsLearningRoute,
   SettingsProfileRoute: SettingsProfileRoute,
   SettingsIndexRoute: SettingsIndexRoute,
 }
@@ -913,6 +954,7 @@ const rootRouteChildren: RootRouteChildren = {
   ContributeRoute: ContributeRoute,
   DashboardRoute: DashboardRouteWithChildren,
   ForgotPasswordRoute: ForgotPasswordRoute,
+  HistoryRoute: HistoryRoute,
   LoginRoute: LoginRoute,
   ObjectivesRoute: ObjectivesRouteWithChildren,
   ProfileRoute: ProfileRouteWithChildren,

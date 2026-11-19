@@ -24,7 +24,10 @@ const navItems: Array<{ label: string; to: string }> = [
 ];
 
 // Profile isn't here because its link needs the signed-in username.
-const profileItems = [{ label: "Settings", to: "/settings" }];
+const profileItems = [
+  { label: "History", to: "/history" },
+  { label: "Settings", to: "/settings" },
+];
 
 // `roles`, when set, hides the item from anyone holding none of them.
 const sepcialRoleItems: Array<{
@@ -142,6 +145,7 @@ export function Navbar() {
                 <DropdownMenu modal={false}>
                   <DropdownMenuTrigger asChild>
                     <Button
+                      aria-label="Account menu"
                       variant="ghost"
                       size="icon"
                       className="h-9 w-9 rounded-md"
@@ -195,6 +199,8 @@ export function Navbar() {
           {/* Mobile Menu Button */}
           <div className="relative md:hidden">
             <Button
+              aria-label="Navigation menu"
+              aria-expanded={mobileOpen}
               variant="ghost"
               size="icon"
               className="h-9 w-9 rounded-md"
