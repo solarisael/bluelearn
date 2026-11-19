@@ -2,19 +2,33 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   learningPreferencesSchema,
   learningHistoryResponseSchema,
+  learningReadsResponseSchema,
+  learningReadResponseSchema,
   guideSchema,
 } from "@bluelearn/schemas";
 import app from "../src/index";
 import { admin, auth, env, jsonAuth, makeUser } from "./helpers";
-import { createPublishedGuide } from "./factories/guides";
+import { createGuideRevision, createPublishedGuide } from "./factories/guides";
 import { createPublishedObjective } from "./factories/objectives";
-import { databaseRows } from "./learning-helpers";
+import { databaseRequest, databaseRows } from "./learning-helpers";
 
 const users: string[] = [];
 async function learner() {
   const value = await makeUser();
   users.push(value.userId);
   return value;
+}
+async function read(
+  token: string,
+  guide: string,
+  revision: string,
+  desired = true
+) {
+  return app.request(
+    `/learning/reads/${guide}`,
+    jsonAuth(token, "PUT", { revision_id: revision, read: desired }),
+    env
+  );
 }
 afterEach(async () => {
   for (const id of users.splice(0)) {
@@ -26,9 +40,27 @@ afterEach(async () => {
 
 describe("Private learning through the real API and Supabase", () => {
   it("refuses anonymous private state", async () => {
-    for (const path of ["/learning/preferences", "/learning/history"]) {
+    for (const path of [
+      "/learning/preferences",
+      "/learning/history",
+      "/learning/reads?guide_ids=",
+    ]) {
       expect((await app.request(path, {}, env)).status).toBe(401);
     }
+    const owner = await learner();
+    const stranger = await learner();
+    const guide = await createPublishedGuide();
+    expect(
+      (await read(owner.token, guide.guide.id, guide.revision.id)).status
+    ).toBe(200);
+    const hidden = await databaseRequest(
+      "learning_reads?select=*&user_id=eq." + owner.userId,
+      "GET",
+      undefined,
+      stranger.token
+    );
+    expect(hidden.status).toBe(200);
+    expect(await hidden.json()).toEqual([]);
   });
 
   it("returns defaults and exposes canonical revision/base identities", async () => {
@@ -51,7 +83,7 @@ describe("Private learning through the real API and Supabase", () => {
     expect(body.revision_id).toBe(guide.revision.id);
   });
 
-  it("deduplicates visits, validates context, paginates, and clears history", async () => {
+  it("deduplicates visits, validates context, paginates, and clears history without removing reads", async () => {
     const user = await learner();
     const guide = await createPublishedGuide();
     const other = await createPublishedGuide();
@@ -84,6 +116,7 @@ describe("Private learning through the real API and Supabase", () => {
       env
     );
     expect(invalid.status).toBe(400);
+    await read(user.token, guide.guide.id, guide.revision.id);
     const history = learningHistoryResponseSchema.parse(
       await (
         await app.request(
@@ -128,6 +161,16 @@ describe("Private learning through the real API and Supabase", () => {
         )
       ).json()
     ).toEqual({ ok: true });
+    const marks = learningReadsResponseSchema.parse(
+      await (
+        await app.request(
+          `/learning/reads?guide_ids=${guide.guide.id}`,
+          auth(user.token),
+          env
+        )
+      ).json()
+    );
+    expect(marks.reads).toHaveLength(1);
   });
 
   it("keeps removal controls but hides unavailable history metadata", async () => {
@@ -168,5 +211,66 @@ describe("Private learning through the real API and Supabase", () => {
         )
       ).status
     ).toBe(200);
+  });
+
+  it("preserves old read marks, rejects stale writes, and bounds batches", async () => {
+    const user = await learner();
+    const guide = await createPublishedGuide();
+    const [first, repeated] = await Promise.all([
+      read(user.token, guide.guide.id, guide.revision.id),
+      read(user.token, guide.guide.id, guide.revision.id),
+    ]);
+    const changes = await Promise.all(
+      [first, repeated].map(async (response) =>
+        learningReadResponseSchema.parse(await response.json())
+      )
+    );
+    expect(changes.map((state) => state.changed).sort()).toEqual([false, true]);
+    const newer = await createGuideRevision(guide.guide.id, {
+      approved_at: new Date().toISOString(),
+    });
+    await admin
+      .from("guides")
+      .update({ current_revision_id: newer.id })
+      .eq("id", guide.guide.id)
+      .throwOnError();
+    const reads = learningReadsResponseSchema.parse(
+      await (
+        await app.request(
+          `/learning/reads?guide_ids=${guide.guide.id}`,
+          auth(user.token),
+          env
+        )
+      ).json()
+    );
+    expect(reads.reads[0]).toMatchObject({
+      revision_id: guide.revision.id,
+      has_newer_revision: true,
+    });
+    expect(
+      (await read(user.token, guide.guide.id, guide.revision.id, false)).status
+    ).toBe(409);
+    expect(
+      learningReadResponseSchema.parse(
+        await (await read(user.token, guide.guide.id, newer.id, false)).json()
+      )
+    ).toEqual({ read: null, changed: true });
+    expect(
+      learningReadResponseSchema.parse(
+        await (await read(user.token, guide.guide.id, newer.id, false)).json()
+      )
+    ).toEqual({ read: null, changed: false });
+    const tooMany = Array.from({ length: 101 }, () => crypto.randomUUID()).join(
+      ","
+    );
+    expect(
+      (
+        await app.request(
+          `/learning/reads?guide_ids=${tooMany}`,
+          auth(user.token),
+          env
+        )
+      ).status
+    ).toBe(400);
   });
 });

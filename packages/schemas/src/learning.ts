@@ -44,5 +44,29 @@ export const learningHistoryResponseSchema = z.object({
   retention_days: z.literal(90),
   paused: z.boolean(),
 });
+export const learningReadSchema = z.object({
+  guide_id: z.uuid(),
+  revision_id: z.uuid(),
+  marked_at: z.string(),
+  has_newer_revision: z.boolean(),
+});
+export const learningReadsQuerySchema = z.strictObject({
+  guide_ids: z
+    .string()
+    .transform((value) => (value === "" ? [] : value.split(",")))
+    .pipe(z.array(z.uuid()).max(100)),
+});
+export const updateLearningReadSchema = z.strictObject({
+  revision_id: z.uuid(),
+  read: z.boolean(),
+});
+export const learningReadsResponseSchema = z.object({
+  reads: z.array(learningReadSchema),
+});
+export const learningReadResponseSchema = z.object({
+  read: learningReadSchema.nullable(),
+  changed: z.boolean(),
+});
 export type AnalyticsSource = z.infer<typeof analyticsSourceSchema>;
 export type LearningPreferences = z.infer<typeof learningPreferencesSchema>;
+export type LearningRead = z.infer<typeof learningReadSchema>;

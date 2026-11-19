@@ -513,6 +513,70 @@ export type Database = {
           },
         ]
       }
+      learning_reads: {
+        Row: {
+          guide_id: string
+          marked_at: string
+          revision_id: string
+          user_id: string
+        }
+        Insert: {
+          guide_id: string
+          marked_at?: string
+          revision_id: string
+          user_id: string
+        }
+        Update: {
+          guide_id?: string
+          marked_at?: string
+          revision_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "learning_reads_guide_id_fkey"
+            columns: ["guide_id"]
+            isOneToOne: false
+            referencedRelation: "guides"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "learning_reads_guide_id_fkey"
+            columns: ["guide_id"]
+            isOneToOne: false
+            referencedRelation: "published_guides"
+            referencedColumns: ["guide_id"]
+          },
+          {
+            foreignKeyName: "learning_reads_revision_id_fkey"
+            columns: ["revision_id"]
+            isOneToOne: false
+            referencedRelation: "guide_revisions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "learning_reads_revision_id_fkey"
+            columns: ["revision_id"]
+            isOneToOne: false
+            referencedRelation: "published_guides"
+            referencedColumns: ["revision_id"]
+          },
+          {
+            foreignKeyName: "learning_reads_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "dashboard_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "learning_reads_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       learning_visit_receipts: {
         Row: {
           event_id: string
@@ -1694,6 +1758,15 @@ export type Database = {
       }
       learning_lock_user: { Args: never; Returns: string }
       learning_preferences_state: { Args: { p_patch?: Json }; Returns: Json }
+      learning_read_state: {
+        Args: {
+          p_guide_id?: string
+          p_guide_ids?: string[]
+          p_read?: boolean
+          p_revision_id?: string
+        }
+        Returns: Json
+      }
       learning_validate_reader: {
         Args: { p_guide: string; p_revision: string }
         Returns: string

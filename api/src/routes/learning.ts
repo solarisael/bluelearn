@@ -6,6 +6,10 @@ import {
   updateLearningPreferencesSchema,
   recordLearningHistorySchema,
   learningHistoryResponseSchema,
+  learningReadsQuerySchema,
+  learningReadsResponseSchema,
+  updateLearningReadSchema,
+  learningReadResponseSchema,
   paginationSchema,
 } from "@bluelearn/schemas";
 import { errorResponses, jsonContent, validate } from "../lib/openapi";
@@ -119,7 +123,7 @@ export const learningRouter = new Hono<HonoEnv>()
   )
   .delete(
     "/history",
-    description("Clear private visits", okSchema),
+    description("Clear private visits without removing progress", okSchema),
     writeLimit,
     async (c) => {
       return c.json(
@@ -130,5 +134,43 @@ export const learningRouter = new Hono<HonoEnv>()
           okSchema
         )
       );
+    }
+  )
+  .get(
+    "/reads",
+    description(
+      "Get private read marks for up to one hundred variants",
+      learningReadsResponseSchema
+    ),
+    validate("query", learningReadsQuerySchema),
+    async (c) => {
+      return c.json(
+        learningResult(
+          await c.get("supabase").rpc("learning_read_state", {
+            p_guide_ids: c.req.valid("query").guide_ids,
+          }),
+          learningReadsResponseSchema
+        )
+      );
+    }
+  )
+  .put(
+    "/reads/:guideId",
+    description(
+      "Set the desired read state for the displayed revision",
+      learningReadResponseSchema
+    ),
+    writeLimit,
+    validate("param", guideParam),
+    validate("json", updateLearningReadSchema),
+    async (c) => {
+      const input = c.req.valid("json");
+      const result = await c.get("supabase").rpc("learning_read_state", {
+        p_guide_id: c.req.valid("param").guideId,
+        p_revision_id: input.revision_id,
+        p_read: input.read,
+      });
+      const response = learningResult(result, learningReadResponseSchema);
+      return c.json(response);
     }
   );
