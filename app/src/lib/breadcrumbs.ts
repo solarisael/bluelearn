@@ -32,6 +32,7 @@ declare module "@tanstack/react-router" {
   interface HistoryState {
     breadcrumbOrigin?: BreadcrumbOrigin;
     analyticsSource?: AnalyticsSource;
+    searchSubmissionId?: string;
   }
 }
 

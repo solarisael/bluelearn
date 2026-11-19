@@ -24,7 +24,11 @@ import {
   useLearningResource,
 } from "@/lib/useLearning";
 import { findGuideNeighbours } from "@/lib/objectiveSnapshot";
-import { analyticsSource, newAnalyticsEventId } from "@/lib/telemetry";
+import {
+  analyticsSource,
+  newAnalyticsEventId,
+  trackEvent,
+} from "@/lib/telemetry";
 import { queueLearningPosition } from "@/lib/learningPositionQueue";
 
 export type DisplayedGuide = {
@@ -140,6 +144,13 @@ function useReaderOpen(
             ? error
             : new Error("Could not save this visit."),
       });
+      trackEvent({
+        name: "progress_save_failed",
+        source: attempt.history.source,
+        guide_id: attempt.history.guide_id,
+        revision_id: attempt.history.revision_id,
+        error_category: learningErrorCategory(error),
+      });
     } finally {
       attempt.saving = false;
     }
@@ -178,6 +189,15 @@ function useReaderOpen(
               objective_revision_id: objectiveRevision,
             }
           : {};
+      trackEvent({
+        event_id: current.eventId,
+        name: "reader_opened",
+        source,
+        guide_id: guide.guideId,
+        guide_base_id: guide.guideBaseId,
+        revision_id: guide.revisionId,
+        ...objectiveContext,
+      });
 
       if (user) {
         current.account = user.id;
@@ -206,6 +226,7 @@ function useReaderOpen(
     user,
     source,
     guide.guideId,
+    guide.guideBaseId,
     guide.revisionId,
     search.objective,
     progress.loading,
@@ -298,11 +319,17 @@ export function ReaderLearning({
             }
             aria-pressed={Boolean(read)}
             onClick={() =>
-              void mutation.run(() =>
-                setLearningRead(guide.guideId, {
+              void mutation.run(
+                () =>
+                  setLearningRead(guide.guideId, {
+                    revision_id: guide.revisionId,
+                    read: !read,
+                  }),
+                {
+                  guide_id: guide.guideId,
                   revision_id: guide.revisionId,
-                  read: !read,
-                })
+                  guide_base_id: guide.guideBaseId,
+                }
               )
             }
           >
@@ -403,12 +430,17 @@ function ReaderObjective({
       `${account}:${progress.data!.objective_id}`,
       position.isCurrent,
       () =>
-        position.run(() =>
-          saveLearningPosition(search.objective!, {
-            expected_revision_id: expectedRevision!,
-            guide_base_id: guide.guideBaseId,
-            target_guide_base_id: target?.guide_base_id ?? undefined,
-          })
+        position.run(
+          () =>
+            saveLearningPosition(search.objective!, {
+              expected_revision_id: expectedRevision!,
+              guide_base_id: guide.guideBaseId,
+              target_guide_base_id: target?.guide_base_id ?? undefined,
+            }),
+          {
+            objective_id: progress.data!.objective_id,
+            objective_revision_id: expectedRevision!,
+          }
         )
     );
 

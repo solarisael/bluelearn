@@ -8,7 +8,7 @@ import { getGuideVariants } from "@/lib/api/guides";
 import { formatDate } from "@/lib/guideUtils";
 import { useSuspensionStatus } from "@/lib/authContext";
 import { parseObjectiveGuideSearch } from "@/lib/objectiveSnapshot";
-import { analyticsSource } from "@/lib/telemetry";
+import { analyticsSource, trackEvent } from "@/lib/telemetry";
 
 type PropsTypes = {
   open: boolean;
@@ -99,7 +99,14 @@ export const VariantsModal = ({
               breadcrumbOrigin: location.state.breadcrumbOrigin,
               analyticsSource: source,
             }}
-            onClick={() => onOpenChange(false)}
+            onClick={() => {
+              trackEvent({
+                name: "variant_selected",
+                source,
+                guide_id: variant.id,
+              });
+              onOpenChange(false);
+            }}
             className={`group relative flex w-full flex-col gap-1.5 rounded-lg border p-3.5 transition-colors hover:bg-muted ${
               isCurrent
                 ? "border-primary/50 bg-primary/5"

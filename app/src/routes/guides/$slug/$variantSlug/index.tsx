@@ -36,6 +36,8 @@ import { useVote } from "@/lib/useVote";
 import { useSuspensionStatus } from "@/lib/authContext";
 import { parseObjectiveGuideSearch } from "@/lib/objectiveSnapshot";
 import { ReaderLearning } from "@/components/learning/ReaderLearning";
+import { ReaderLoadFailure } from "@/components/learning/ReaderLoadFailure";
+import { ApiError } from "@/lib/api/apiHelpers";
 
 export const Route = createFileRoute("/guides/$slug/$variantSlug/")({
   validateSearch: parseObjectiveGuideSearch,
@@ -44,14 +46,19 @@ export const Route = createFileRoute("/guides/$slug/$variantSlug/")({
       const variant = await getVariantBySlug(params.slug, params.variantSlug, {
         signal: abortController.signal,
       });
+
       if (!variant.current) throw notFound();
 
       return { variant, current: variant.current };
-    } catch {
-      throw notFound();
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 404) throw notFound();
+
+      throw error;
     }
   },
   component: RouteComponent,
+  errorComponent: ({ error }) => <ReaderLoadFailure error={error} />,
+  notFoundComponent: () => <ReaderLoadFailure unavailable />,
 });
 
 function RouteComponent() {
@@ -262,7 +269,9 @@ function RouteComponent() {
               }}
               search={search}
             />
-          ) : null}
+          ) : (
+            <ReaderLoadFailure unavailable />
+          )}
         </main>
       </section>
     </div>

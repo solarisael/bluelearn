@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Separator } from "@/components/ui/separator";
 import { Logo } from "@/components/Logo";
+import { beginSearchSubmission } from "@/components/analytics/SearchTelemetry";
 
 const navItems: Array<{ label: string; to: string }> = [
   { label: "Browse", to: "/browse" },
@@ -57,11 +58,18 @@ export function Navbar() {
   function handleSearch(e: React.FormEvent) {
     e.preventDefault();
     const q = query.trim();
+
     if (!q) return;
 
     setMobileOpen(false);
     setQuery("");
-    navigate({ to: "/browse", search: { q } });
+    const searchSubmissionId = beginSearchSubmission();
+
+    navigate({
+      to: "/browse",
+      search: { q },
+      state: { searchSubmissionId },
+    });
   }
 
   async function handleSignOut() {

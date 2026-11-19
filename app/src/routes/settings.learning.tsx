@@ -43,7 +43,7 @@ function LearningSettings() {
           Pause reading history
         </label>
         <p className="text-sm text-muted-foreground">
-          Stops history. Progress still saves.
+          Stops history and account-linked analytics. Progress still saves.
         </p>
         <p className="text-sm text-muted-foreground">
           History stays private for 90 days.{" "}

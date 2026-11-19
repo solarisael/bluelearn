@@ -27,6 +27,7 @@ type PropTypes = {
   origin?: BreadcrumbOrigin;
   variantSlug?: string;
   source?: AnalyticsSource;
+  onSelect?: React.MouseEventHandler<HTMLAnchorElement>;
   readStatus?: "read" | "unread" | "requested" | "unavailable";
   search?: ObjectiveGuideSearch;
 };
@@ -38,6 +39,7 @@ export const GuideCard = ({
   search,
   variantSlug,
   source,
+  onSelect,
   readStatus,
 }: PropTypes) => {
   const card = (
@@ -109,6 +111,7 @@ export const GuideCard = ({
         breadcrumbOrigin: origin,
         analyticsSource: source ?? origin?.type,
       }}
+      onClick={onSelect}
     >
       {card}
     </Link>

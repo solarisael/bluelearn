@@ -67,12 +67,14 @@ export function ObjectiveProgress({
     if (attempt.current?.key !== key)
       attempt.current = { key, eventId: newAnalyticsEventId() };
 
-    const saved = await mutation.run(() =>
-      changeLearningObjective(slug, action, {
-        event_id: attempt.current!.eventId,
-        expected_revision_id: expected,
-        target_guide_base_id: target,
-      })
+    const saved = await mutation.run(
+      () =>
+        changeLearningObjective(slug, action, {
+          event_id: attempt.current!.eventId,
+          expected_revision_id: expected,
+          target_guide_base_id: target,
+        }),
+      { objective_id: state!.objective_id, objective_revision_id: expected }
     );
 
     if (!saved) return;

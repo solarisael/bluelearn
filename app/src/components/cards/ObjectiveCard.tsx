@@ -33,6 +33,7 @@ type PropTypes = {
   to: ToPathOption<RegisteredRouter>;
   origin?: BreadcrumbOrigin;
   source?: AnalyticsSource;
+  onSelect?: React.MouseEventHandler<HTMLAnchorElement>;
 };
 
 // Only the last three guides are drawn. The rest collapse into a leading
@@ -138,7 +139,13 @@ function LevelsGraph({
   );
 }
 
-export const ObjectiveCard = ({ objective, to, origin, source }: PropTypes) => {
+export const ObjectiveCard = ({
+  objective,
+  to,
+  origin,
+  source,
+  onSelect,
+}: PropTypes) => {
   return (
     <Link
       to={to}
@@ -147,6 +154,7 @@ export const ObjectiveCard = ({ objective, to, origin, source }: PropTypes) => {
         breadcrumbOrigin: origin,
         analyticsSource: source ?? origin?.type,
       }}
+      onClick={onSelect}
     >
       <Card className="group flex h-full flex-col justify-between rounded-md bg-background shadow-none transition-colors hover:bg-muted">
         {/* Header */}

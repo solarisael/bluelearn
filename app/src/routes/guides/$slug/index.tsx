@@ -19,9 +19,11 @@ import { Button } from "@/components/ui/button";
 
 import { buildBreadcrumbs } from "@/lib/breadcrumbs";
 import { getGuide } from "@/lib/api/guides";
+import { ApiError } from "@/lib/api/apiHelpers";
 import { buildGuideMeta } from "@/lib/guideUtils";
 import { parseObjectiveGuideSearch } from "@/lib/objectiveSnapshot";
 import { ReaderLearning } from "@/components/learning/ReaderLearning";
+import { ReaderLoadFailure } from "@/components/learning/ReaderLoadFailure";
 
 import "katex/dist/katex.min.css";
 import { GuideSidebar } from "@/components/sidebar/GuideSidebar";
@@ -49,14 +51,18 @@ export const Route = createFileRoute("/guides/$slug/")({
       return {
         guide: await getGuide(params.slug, { signal: abortController.signal }),
       };
-    } catch {
-      throw notFound();
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 404) throw notFound();
+
+      throw error;
     }
   },
   head: ({ loaderData }) => ({
     meta: loaderData ? buildGuideMeta(loaderData.guide) : [], // Metadata
   }),
   component: RouteComponent,
+  errorComponent: ({ error }) => <ReaderLoadFailure error={error} />,
+  notFoundComponent: () => <ReaderLoadFailure unavailable />,
 });
 
 function RouteComponent() {
@@ -265,7 +271,9 @@ function RouteComponent() {
               }}
               search={search}
             />
-          ) : null}
+          ) : (
+            <ReaderLoadFailure unavailable />
+          )}
         </main>
       </section>
     </div>

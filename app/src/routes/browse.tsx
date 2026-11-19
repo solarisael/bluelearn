@@ -1,5 +1,9 @@
 import { useEffect, useState } from "react";
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import {
+  createFileRoute,
+  useNavigate,
+  useRouterState,
+} from "@tanstack/react-router";
 
 import type { GuideListItem, ObjectiveListItem } from "@bluelearn/schemas";
 import type {
@@ -11,6 +15,10 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { ObjectiveCard } from "@/components/cards/ObjectiveCard";
 
+import {
+  SearchTelemetry,
+  beginSearchSubmission,
+} from "@/components/analytics/SearchTelemetry";
 import { Route as ObjectiveRoute } from "@/routes/objectives/$slug/index";
 import { Route as GuideRoute } from "@/routes/guides/$slug/index";
 
@@ -25,6 +33,7 @@ import { listGuidesPage } from "@/lib/api/guides";
 import { listObjectives } from "@/lib/api/objectives";
 import { formatDate, formatDuration } from "@/lib/guideUtils";
 import { buildPageMeta } from "@/lib/seo";
+import { trackEvent } from "@/lib/telemetry";
 
 const PAGE_SIZE = 10;
 
@@ -167,6 +176,7 @@ function objectiveCards(items: Array<ObjectiveListItem>) {
   return items
     .filter((o): o is typeof o & { slug: string } => o.slug !== null)
     .map((o) => ({
+      id: o.id,
       slug: o.slug,
       title: o.title,
       summary: o.summary,
@@ -184,6 +194,7 @@ function guideCards(items: Array<GuideListItem>) {
   return items
     .filter((g): g is typeof g & { slug: string } => g.slug !== null)
     .map((g) => ({
+      id: g.id,
       slug: g.slug,
       title: g.title ?? "",
       author: g.author,
@@ -235,6 +246,30 @@ function RouteComponent() {
   } = Route.useSearch();
   const { guides, objectives, error } = Route.useLoaderData();
   const navigate = useNavigate({ from: Route.fullPath });
+  const submissionId = useRouterState({
+    select: (state) => state.location.state.searchSubmissionId,
+  });
+  const pending = useRouterState({
+    select: (state) => state.status === "pending",
+  });
+  const resultCount = (guides?.found ?? 0) + (objectives?.found ?? 0);
+
+  const selectResult = (
+    entity: { id: string },
+    entityType: "guide" | "objective"
+  ) => {
+    if (!q) return;
+
+    trackEvent({
+      name: "search_result_selected",
+      source: "search",
+      entity_type: entityType,
+      result_count: resultCount,
+      ...(entityType === "guide"
+        ? { guide_base_id: entity.id }
+        : { objective_id: entity.id }),
+    });
+  };
 
   // Local field state, kept in sync with the URL so back/forward updates it.
   const [query, setQuery] = useState(q ?? "");
@@ -245,15 +280,21 @@ function RouteComponent() {
 
   // Merge into existing params so q and the filters don't clobber each other.
   // validateSearch drops empty values, keeping the URL clean.
-  const submit = (next: string) =>
-    navigate({
+  const submit = (next: string, explicit = true) => {
+    const queryText = next.trim();
+    const searchSubmissionId =
+      queryText && explicit ? beginSearchSubmission() : undefined;
+
+    return navigate({
       search: (prev) => ({
         ...prev,
-        q: next.trim(),
+        q: queryText,
         guidesPage: undefined,
         objectivesPage: undefined,
       }),
+      state: { searchSubmissionId },
     });
+  };
   const setFilters = (f: SearchFilters) =>
     navigate({
       search: (prev) => ({
@@ -263,10 +304,17 @@ function RouteComponent() {
         guidesPage: undefined,
         objectivesPage: undefined,
       }),
+      state: { searchSubmissionId: undefined },
     });
 
   return (
     <Shell>
+      <SearchTelemetry
+        submissionId={q ? submissionId : undefined}
+        resultCount={resultCount}
+        failed={Boolean(error)}
+        pending={pending}
+      />
       <section className="border-b px-8 py-10 lg:px-16">
         <div className="mb-4 flex items-center justify-between">
           <h1 className="font-mono text-[14px] tracking-[0.08em] text-muted-foreground uppercase">
@@ -282,7 +330,7 @@ function RouteComponent() {
           onSubmit={() => submit(query)}
           onClear={() => {
             setQuery("");
-            submit("");
+            submit("", false);
           }}
           filter={
             <SearchFilterMenu
@@ -322,6 +370,7 @@ function RouteComponent() {
                       objective={objective}
                       to={ObjectiveRoute.to}
                       source={q ? "search" : "direct"}
+                      onSelect={() => selectResult(objective, "objective")}
                     />
                   ))}
                 </div>
@@ -333,6 +382,7 @@ function RouteComponent() {
                 onSelect={(p) =>
                   navigate({
                     search: (prev) => ({ ...prev, objectivesPage: p }),
+                    state: { searchSubmissionId: undefined },
                   })
                 }
               />
@@ -370,6 +420,7 @@ function RouteComponent() {
                               onClick={(e) => {
                                 e.preventDefault();
                                 e.stopPropagation();
+                                selectResult(guide, "guide");
                                 navigate({
                                   to: "/guides/$slug/walkthrough",
                                   params: { slug: guide.slug },
@@ -390,6 +441,7 @@ function RouteComponent() {
                       }}
                       to={GuideRoute.to}
                       source={q ? "search" : "direct"}
+                      onSelect={() => selectResult(guide, "guide")}
                     />
                   ))}
                 </div>
@@ -399,7 +451,10 @@ function RouteComponent() {
                 found={guides.found}
                 page={guidesPage}
                 onSelect={(p) =>
-                  navigate({ search: (prev) => ({ ...prev, guidesPage: p }) })
+                  navigate({
+                    search: (prev) => ({ ...prev, guidesPage: p }),
+                    state: { searchSubmissionId: undefined },
+                  })
                 }
               />
             </CollapsibleSection>

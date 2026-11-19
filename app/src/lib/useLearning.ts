@@ -7,6 +7,16 @@ import {
   getLearningPreferences,
   getLearningReads,
 } from "@/lib/api/learning";
+import { trackEvent } from "@/lib/telemetry";
+
+type EventContext = Pick<
+  Parameters<typeof trackEvent>[0],
+  | "guide_id"
+  | "revision_id"
+  | "guide_base_id"
+  | "objective_id"
+  | "objective_revision_id"
+>;
 
 type LearningOverview = Awaited<
   ReturnType<typeof getLearningObjectives>
@@ -179,7 +189,10 @@ export function useLearningMutation(scope = "") {
     };
   }, [owner]);
 
-  async function run<T>(action: () => Promise<T>): Promise<T | null> {
+  async function run<T>(
+    action: () => Promise<T>,
+    context?: EventContext
+  ): Promise<T | null> {
     if (
       !owner ||
       currentOwner.current !== owner ||
@@ -213,6 +226,13 @@ export function useLearningMutation(scope = "") {
             ? error
             : new Error("Could not save learning state."),
       });
+      if (context) {
+        trackEvent({
+          name: "progress_save_failed",
+          source: "objective",
+          error_category: learningErrorCategory(error),
+        });
+      }
       return null;
     } finally {
       if (inFlight.current === request) inFlight.current = null;
