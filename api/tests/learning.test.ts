@@ -4,12 +4,24 @@ import {
   learningHistoryResponseSchema,
   learningReadsResponseSchema,
   learningReadResponseSchema,
+  learningObjectiveStateSchema,
+  learningObjectivesResponseSchema,
+  publicLearningResponseSchema,
   guideSchema,
 } from "@bluelearn/schemas";
 import app from "../src/index";
-import { admin, auth, env, jsonAuth, makeUser } from "./helpers";
-import { createGuideRevision, createPublishedGuide } from "./factories/guides";
-import { createPublishedObjective } from "./factories/objectives";
+import { admin, auth, env, insert, jsonAuth, makeUser } from "./helpers";
+import { getUsername } from "./factories/identity";
+import {
+  createGuide,
+  createGuideRevision,
+  createPublishedGuide,
+} from "./factories/guides";
+import {
+  addObjectiveNode,
+  createObjectiveRevision,
+  createPublishedObjective,
+} from "./factories/objectives";
 import { databaseRequest, databaseRows } from "./learning-helpers";
 
 const users: string[] = [];
@@ -17,6 +29,23 @@ async function learner() {
   const value = await makeUser();
   users.push(value.userId);
   return value;
+}
+async function objectiveAction(
+  token: string,
+  slug: string,
+  action: string,
+  revision: string,
+  extra = {}
+) {
+  return app.request(
+    `/learning/objectives/${slug}/${action}`,
+    jsonAuth(token, "POST", {
+      event_id: crypto.randomUUID(),
+      expected_revision_id: revision,
+      ...extra,
+    }),
+    env
+  );
 }
 async function read(
   token: string,
@@ -39,17 +68,20 @@ afterEach(async () => {
 });
 
 describe("Private learning through the real API and Supabase", () => {
-  it("refuses anonymous private state", async () => {
+  it("refuses anonymous private state and direct writes that bypass validated transitions", async () => {
     for (const path of [
       "/learning/preferences",
       "/learning/history",
       "/learning/reads?guide_ids=",
+      "/learning/objectives",
+      "/learning/objectives/missing",
     ]) {
       expect((await app.request(path, {}, env)).status).toBe(401);
     }
     const owner = await learner();
     const stranger = await learner();
     const guide = await createPublishedGuide();
+    const objective = await createPublishedObjective(owner.userId, guide);
     expect(
       (await read(owner.token, guide.guide.id, guide.revision.id)).status
     ).toBe(200);
@@ -61,11 +93,47 @@ describe("Private learning through the real API and Supabase", () => {
     );
     expect(hidden.status).toBe(200);
     expect(await hidden.json()).toEqual([]);
+
+    const bypass = await databaseRequest(
+      "learning_enrollments",
+      "POST",
+      {
+        user_id: owner.userId,
+        objective_id: objective.objective.id,
+        objective_revision_id: objective.revision.id,
+        completed_at: new Date().toISOString(),
+      },
+      owner.token
+    );
+    expect(bypass.status).toBe(403);
   });
 
-  it("returns defaults and exposes canonical revision/base identities", async () => {
+  it("returns defaults without enrollment side effects and exposes canonical revision/base identities", async () => {
     const user = await learner();
     const guide = await createPublishedGuide();
+    const objective = await createPublishedObjective(user.userId, guide);
+    const response = await app.request(
+      `/learning/objectives/${objective.objective.slug}`,
+      auth(user.token),
+      env
+    );
+    expect(response.status).toBe(200);
+    const state = learningObjectiveStateSchema.parse(await response.json());
+    expect(state.enrollment).toBeNull();
+    expect(state.counts).toEqual({
+      included: 1,
+      read: 0,
+      requested: 0,
+      unavailable: 0,
+    });
+    expect(state.steps[0]).toMatchObject({
+      guide_id: guide.guide.id,
+      variant_slug: guide.guide.slug,
+      state: "unread",
+    });
+    expect(
+      await databaseRows(`learning_enrollments?user_id=eq.${user.userId}`)
+    ).toEqual([]);
     expect(
       await databaseRows(`learning_preferences?user_id=eq.${user.userId}`)
     ).toEqual([]);
@@ -76,6 +144,7 @@ describe("Private learning through the real API and Supabase", () => {
     );
     expect(learningPreferencesSchema.parse(await prefs.json())).toEqual({
       history_paused: false,
+      show_completed_objectives: false,
     });
     const canonical = await app.request(`/guides/${guide.base.slug}`, {}, env);
     const body = guideSchema.parse(await canonical.json());
@@ -272,5 +341,376 @@ describe("Private learning through the real API and Supabase", () => {
         )
       ).status
     ).toBe(400);
+  });
+
+  it("counts only pinned variants and refuses unread, requested, or unavailable included steps", async () => {
+    const user = await learner();
+    const canonical = await createPublishedGuide();
+    const pinned = await createGuide(canonical.base.id, {
+      status: "published",
+      slug: "pinned",
+    });
+    const revision = await createGuideRevision(pinned.id, {
+      approved_at: new Date().toISOString(),
+    });
+    await admin
+      .from("guides")
+      .update({ current_revision_id: revision.id })
+      .eq("id", pinned.id)
+      .throwOnError();
+    const objective = await createPublishedObjective(user.userId, {
+      base: canonical.base,
+      guide: pinned,
+    });
+    const skipped = await createPublishedGuide();
+    await addObjectiveNode(
+      objective.revision.id,
+      skipped.base.id,
+      skipped.guide.id,
+      { is_included: false }
+    );
+    await read(user.token, canonical.guide.id, canonical.revision.id);
+    const start = await objectiveAction(
+      user.token,
+      objective.objective.slug!,
+      "start",
+      objective.revision.id,
+      { target_guide_base_id: canonical.base.id }
+    );
+    expect(start.status).toBe(200);
+    const state = learningObjectiveStateSchema.parse(await start.json());
+    expect(state.counts).toEqual({
+      included: 1,
+      read: 0,
+      requested: 0,
+      unavailable: 0,
+    });
+    expect(state.steps[0]?.variant_slug).toBe("pinned");
+    expect(
+      (
+        await objectiveAction(
+          user.token,
+          objective.objective.slug!,
+          "complete",
+          objective.revision.id
+        )
+      ).status
+    ).toBe(409);
+    await read(user.token, pinned.id, revision.id);
+    const newer = await createGuideRevision(pinned.id, {
+      approved_at: new Date().toISOString(),
+    });
+    await admin
+      .from("guides")
+      .update({ current_revision_id: newer.id })
+      .eq("id", pinned.id)
+      .throwOnError();
+    const completionInput = {
+      event_id: crypto.randomUUID(),
+      expected_revision_id: objective.revision.id,
+    };
+    const completions = await Promise.all(
+      [0, 1].map(() =>
+        app.request(
+          `/learning/objectives/${objective.objective.slug}/complete`,
+          jsonAuth(user.token, "POST", completionInput),
+          env
+        )
+      )
+    );
+    for (const complete of completions) {
+      expect(complete.status).toBe(200);
+      expect(
+        learningObjectiveStateSchema.parse(await complete.json()).steps[0]
+          ?.has_newer_revision
+      ).toBe(true);
+    }
+
+    const requestedObjective = await createPublishedObjective(
+      user.userId,
+      canonical
+    );
+    await insert("objective_revision_nodes", {
+      revision_id: requestedObjective.revision.id,
+      title: "Missing step",
+      summary: "Requested prerequisite",
+    });
+    await objectiveAction(
+      user.token,
+      requestedObjective.objective.slug!,
+      "start",
+      requestedObjective.revision.id
+    );
+    expect(
+      (
+        await objectiveAction(
+          user.token,
+          requestedObjective.objective.slug!,
+          "complete",
+          requestedObjective.revision.id
+        )
+      ).status
+    ).toBe(409);
+    const requested = learningObjectiveStateSchema.parse(
+      await (
+        await app.request(
+          `/learning/objectives/${requestedObjective.objective.slug}`,
+          auth(user.token),
+          env
+        )
+      ).json()
+    );
+    expect(requested.counts.requested).toBe(1);
+    expect(requested.counts.included).toBe(2);
+
+    const unavailableObjective = await createPublishedObjective(
+      user.userId,
+      canonical
+    );
+    await objectiveAction(
+      user.token,
+      unavailableObjective.objective.slug!,
+      "start",
+      unavailableObjective.revision.id
+    );
+    await admin
+      .from("guides")
+      .update({ status: "archived" })
+      .eq("id", canonical.guide.id)
+      .throwOnError();
+    expect(
+      (
+        await objectiveAction(
+          user.token,
+          unavailableObjective.objective.slug!,
+          "complete",
+          unavailableObjective.revision.id
+        )
+      ).status
+    ).toBe(409);
+    const unavailable = learningObjectiveStateSchema.parse(
+      await (
+        await app.request(
+          `/learning/objectives/${unavailableObjective.objective.slug}`,
+          auth(user.token),
+          env
+        )
+      ).json()
+    );
+    expect(unavailable.counts.unavailable).toBe(1);
+  });
+
+  it("validates enrollment membership and deduplicates concurrent action retries independently of telemetry", async () => {
+    const user = await learner();
+    const guide = await createPublishedGuide();
+    const other = await createPublishedGuide();
+    const objective = await createPublishedObjective(user.userId, guide);
+    const position = (body: unknown) =>
+      app.request(
+        `/learning/objectives/${objective.objective.slug}/position`,
+        jsonAuth(user.token, "PATCH", body),
+        env
+      );
+    expect(
+      (
+        await position({
+          expected_revision_id: objective.revision.id,
+          guide_base_id: guide.base.id,
+        })
+      ).status
+    ).toBe(409);
+    expect(
+      (
+        await objectiveAction(
+          user.token,
+          objective.objective.slug!,
+          "start",
+          objective.revision.id,
+          { target_guide_base_id: other.base.id }
+        )
+      ).status
+    ).toBe(400);
+    await objectiveAction(
+      user.token,
+      objective.objective.slug!,
+      "start",
+      objective.revision.id
+    );
+    expect(
+      (
+        await position({
+          expected_revision_id: crypto.randomUUID(),
+          guide_base_id: guide.base.id,
+        })
+      ).status
+    ).toBe(409);
+    expect(
+      (
+        await position({
+          expected_revision_id: objective.revision.id,
+          guide_base_id: other.base.id,
+        })
+      ).status
+    ).toBe(400);
+    expect(
+      (
+        await position({
+          expected_revision_id: objective.revision.id,
+          guide_base_id: guide.base.id,
+        })
+      ).status
+    ).toBe(200);
+    const input = {
+      event_id: crypto.randomUUID(),
+      expected_revision_id: objective.revision.id,
+    };
+    const responses = await Promise.all(
+      [0, 1].map(() =>
+        app.request(
+          `/learning/objectives/${objective.objective.slug}/resume`,
+          jsonAuth(user.token, "POST", input),
+          env
+        )
+      )
+    );
+    const states = await Promise.all(
+      responses.map(async (response) => {
+        expect(response.status).toBe(200);
+        return learningObjectiveStateSchema.parse(await response.json());
+      })
+    );
+    expect(states[0]?.enrollment?.last_resumed_at).toBe(
+      states[1]?.enrollment?.last_resumed_at
+    );
+    const changedPayload = await app.request(
+      `/learning/objectives/${objective.objective.slug}/resume`,
+      jsonAuth(user.token, "POST", {
+        ...input,
+        target_guide_base_id: guide.base.id,
+      }),
+      env
+    );
+    expect(changedPayload.status).toBe(409);
+  });
+
+  it("reopens on the current revision and preserves the last historical achievement", async () => {
+    const user = await learner();
+    const oldGuide = await createPublishedGuide();
+    const newGuide = await createPublishedGuide();
+    const objective = await createPublishedObjective(user.userId, oldGuide, {
+      title: "Original achievement",
+    });
+    await objectiveAction(
+      user.token,
+      objective.objective.slug!,
+      "start",
+      objective.revision.id
+    );
+    await app.request(
+      `/learning/objectives/${objective.objective.slug}/position`,
+      jsonAuth(user.token, "PATCH", {
+        expected_revision_id: objective.revision.id,
+        guide_base_id: oldGuide.base.id,
+      }),
+      env
+    );
+    await read(user.token, oldGuide.guide.id, oldGuide.revision.id);
+    const completed = learningObjectiveStateSchema.parse(
+      await (
+        await objectiveAction(
+          user.token,
+          objective.objective.slug!,
+          "complete",
+          objective.revision.id
+        )
+      ).json()
+    );
+    const newer = await createObjectiveRevision(objective.objective.id, {
+      title: "Current title",
+      status: "published",
+      published_at: new Date().toISOString(),
+    });
+    await addObjectiveNode(newer.id, newGuide.base.id, newGuide.guide.id, {
+      is_target: true,
+    });
+    await admin
+      .from("objectives")
+      .update({ current_revision_id: newer.id })
+      .eq("id", objective.objective.id)
+      .throwOnError();
+    const beforeReopen = learningObjectiveStateSchema.parse(
+      await (
+        await app.request(
+          `/learning/objectives/${objective.objective.slug}`,
+          auth(user.token),
+          env
+        )
+      ).json()
+    );
+    expect(beforeReopen.enrollment?.objective_revision_id).toBe(
+      objective.revision.id
+    );
+    expect(beforeReopen.enrollment?.completed_at).toBe(
+      completed.enrollment?.completed_at
+    );
+    const reopened = learningObjectiveStateSchema.parse(
+      await (
+        await objectiveAction(
+          user.token,
+          objective.objective.slug!,
+          "reopen",
+          newer.id,
+          { target_guide_base_id: newGuide.base.id }
+        )
+      ).json()
+    );
+    expect(reopened.enrollment).toMatchObject({
+      objective_revision_id: newer.id,
+      completed_at: null,
+      position_guide_base_id: null,
+      completed_revision_id: objective.revision.id,
+      last_completed_at: completed.enrollment?.last_completed_at,
+    });
+    const username = await getUsername(user.userId);
+    expect(
+      publicLearningResponseSchema.parse(
+        await (
+          await app.request(`/learning/public/${username}`, {}, env)
+        ).json()
+      ).objectives
+    ).toEqual([]);
+    expect(
+      (
+        await app.request(
+          "/learning/preferences",
+          jsonAuth(user.token, "PATCH", { show_completed_objectives: true }),
+          env
+        )
+      ).status
+    ).toBe(200);
+    const publicState = publicLearningResponseSchema.parse(
+      await (await app.request(`/learning/public/${username}`, {}, env)).json()
+    );
+    expect(publicState.objectives).toEqual([
+      {
+        slug: objective.objective.slug,
+        title: "Original achievement",
+        completed_revision_id: objective.revision.id,
+        completed_at: completed.enrollment?.last_completed_at,
+      },
+    ]);
+    const list = learningObjectivesResponseSchema.parse(
+      await (
+        await app.request(
+          "/learning/objectives?page=1&limit=1",
+          auth(user.token),
+          env
+        )
+      ).json()
+    );
+    expect(list.total).toBe(1);
+    expect(list.objectives[0]?.enrollment?.objective_revision_id).toBe(
+      newer.id
+    );
   });
 });

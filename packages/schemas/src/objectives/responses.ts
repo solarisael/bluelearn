@@ -61,6 +61,8 @@ export const objectiveSnapshotNodeSchema = z.object({
   id: z.string(),
   guide_base_id: z.string().nullable(),
   guide_id: z.string().nullable(),
+  variant_slug: z.string().nullable(),
+  guide_revision_id: z.string().nullable(),
   slug: z.string().nullable(),
   title: z.string().nullable(),
   summary: z.string().nullable(),

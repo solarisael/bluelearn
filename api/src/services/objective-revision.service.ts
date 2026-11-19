@@ -39,7 +39,13 @@ export async function getRevisionSnapshot(
 ) {
   const { data: nodeRows, error: nodeError } = await supabase
     .from("objective_revision_nodes")
-    .select(`${NODE_COLS}, request_id, title, summary`)
+    .select(
+      `${NODE_COLS}, request_id, title, summary,
+      pinned:guides!learning_path_revision_nodes_variant_of_base(
+        slug, current_revision_id,
+        current:guide_revisions!guides_current_revision_id_fkey(title)
+      )`
+    )
     .eq("revision_id", revisionId);
 
   if (nodeError) {
@@ -52,20 +58,12 @@ export async function getRevisionSnapshot(
       (n): n is typeof n & { guide_base_id: string } => n.guide_base_id !== null
     )
     .map((n) => n.guide_base_id);
-  const baseMeta = new Map<
-    string,
-    { slug: string | null; title: string | null }
-  >();
+  const baseMeta = new Map<string, { slug: string | null }>();
 
   if (baseIds.length > 0) {
     const { data: bases, error: baseError } = await supabase
       .from("guide_bases")
-      .select(
-        `id, slug,
-         canonical:guides!guide_bases_canonical_guide_id_fkey(
-           current:guide_revisions!guides_current_revision_id_fkey(title)
-         )`
-      )
+      .select("id, slug")
       .in("id", baseIds);
 
     if (baseError) {
@@ -75,7 +73,6 @@ export async function getRevisionSnapshot(
     for (const b of bases ?? [])
       baseMeta.set(b.id, {
         slug: b.slug,
-        title: b.canonical?.current?.title ?? null,
       });
   }
 
@@ -87,8 +84,10 @@ export async function getRevisionSnapshot(
       id: n.id,
       guide_base_id: n.guide_base_id,
       guide_id: n.guide_id,
+      variant_slug: n.pinned?.slug ?? null,
+      guide_revision_id: n.pinned?.current_revision_id ?? null,
       slug: base?.slug ?? null,
-      title: isRequest ? n.title : (base?.title ?? null),
+      title: isRequest ? n.title : (n.pinned?.current?.title ?? null),
       summary: isRequest ? n.summary : null,
       request_id: n.request_id,
       is_target: n.is_target,
@@ -422,7 +421,10 @@ export async function updateObjectiveNode(
     .update(input)
     .eq("revision_id", revisionId)
     .eq("guide_base_id", baseId)
-    .select(NODE_COLS);
+    .select(`${NODE_COLS}, pinned:guides!learning_path_revision_nodes_variant_of_base(
+      slug, current_revision_id,
+      current:guide_revisions!guides_current_revision_id_fkey(title)
+    )`);
 
   if (error) throw new ServiceError("Unable to update node", 400);
   if (!data || data.length === 0) {
@@ -432,12 +434,7 @@ export async function updateObjectiveNode(
 
   const { data: base, error: baseError } = await supabase
     .from("guide_bases")
-    .select(
-      `slug,
-       canonical:guides!guide_bases_canonical_guide_id_fkey(
-         current:guide_revisions!guides_current_revision_id_fkey(title)
-       )`
-    )
+    .select("slug")
     .eq("id", baseId)
     .maybeSingle();
 
@@ -451,8 +448,10 @@ export async function updateObjectiveNode(
       id: node.id,
       guide_base_id: node.guide_base_id,
       guide_id: node.guide_id,
+      variant_slug: node.pinned?.slug ?? null,
+      guide_revision_id: node.pinned?.current_revision_id ?? null,
       slug: base?.slug ?? null,
-      title: base?.canonical?.current?.title ?? null,
+      title: node.pinned?.current?.title ?? null,
       is_target: node.is_target,
       is_included: node.is_included,
       is_featured: node.is_featured,
@@ -1024,6 +1023,8 @@ type SnapshotNode = {
   id: string;
   guide_base_id: string | null;
   guide_id: string | null;
+  variant_slug: string | null;
+  guide_revision_id: string | null;
   slug: string | null;
   title: string | null;
   summary: string | null;
@@ -1091,11 +1092,8 @@ export async function diffObjectiveRevisions(
   };
 }
 
-// Two nodes paired by diffKey are "the same" iff every per-revision column
-// matches. slug/title are excluded: both snapshots read them live from the
-// current guide_bases row, so a paired guide always agrees on them and they
-// can never signal a change. id is excluded too: it is a per-revision surrogate,
-// so paired guides never share one.
+// Compare frozen node fields, not live slugs, guide revisions, or titles.
+// Node identifiers differ between objective revisions.
 function sameNode(
   a: {
     guide_id: string | null;

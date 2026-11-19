@@ -10,6 +10,12 @@ import {
   learningReadsResponseSchema,
   updateLearningReadSchema,
   learningReadResponseSchema,
+  learningObjectivesResponseSchema,
+  learningObjectiveStateSchema,
+  learningObjectiveActionSchema,
+  learningObjectiveActionInputSchema,
+  learningObjectivePositionSchema,
+  publicLearningResponseSchema,
   paginationSchema,
 } from "@bluelearn/schemas";
 import { errorResponses, jsonContent, validate } from "../lib/openapi";
@@ -19,6 +25,8 @@ import { learningResult } from "../services/learning.service";
 import type { HonoEnv } from "../types";
 
 const guideParam = z.object({ guideId: z.uuid() });
+const slugParam = z.object({ slug: z.string().min(1).max(200) });
+const actionParam = slugParam.extend({ action: learningObjectiveActionSchema });
 const okSchema = z.object({ ok: z.literal(true) });
 const recordedSchema = z.object({ recorded: z.boolean() });
 const writeLimit = rateLimitMiddleware({
@@ -37,6 +45,24 @@ const description = (summary: string, schema: z.ZodType) =>
   });
 
 export const learningRouter = new Hono<HonoEnv>()
+  .get(
+    "/public/:username",
+    description(
+      "Get public objective achievements",
+      publicLearningResponseSchema
+    ),
+    validate("param", z.object({ username: z.string().min(1).max(100) })),
+    async (c) => {
+      return c.json(
+        learningResult(
+          await c.get("supabase").rpc("learning_public_completions", {
+            p_username: c.req.valid("param").username,
+          }),
+          publicLearningResponseSchema
+        )
+      );
+    }
+  )
   .use(requireUser)
   .get(
     "/preferences",
@@ -171,6 +197,83 @@ export const learningRouter = new Hono<HonoEnv>()
         p_read: input.read,
       });
       const response = learningResult(result, learningReadResponseSchema);
+      return c.json(response);
+    }
+  )
+  .get(
+    "/objectives",
+    description(
+      "List private objective enrollments",
+      learningObjectivesResponseSchema
+    ),
+    validate("query", paginationSchema),
+    async (c) => {
+      const { page, limit } = c.req.valid("query");
+      return c.json(
+        learningResult(
+          await c.get("supabase").rpc("learning_objectives_state", {
+            p_page: page,
+            p_limit: limit,
+          }),
+          learningObjectivesResponseSchema
+        )
+      );
+    }
+  )
+  .get(
+    "/objectives/:slug",
+    description(
+      "Get pinned objective progress without enrolling",
+      learningObjectiveStateSchema
+    ),
+    validate("param", slugParam),
+    async (c) => {
+      return c.json(
+        learningResult(
+          await c.get("supabase").rpc("learning_objective_state", {
+            p_slug: c.req.valid("param").slug,
+          }),
+          learningObjectiveStateSchema
+        )
+      );
+    }
+  )
+  .post(
+    "/objectives/:slug/:action",
+    description(
+      "Start, resume, complete, or reopen an objective",
+      learningObjectiveStateSchema
+    ),
+    writeLimit,
+    validate("param", actionParam),
+    validate("json", learningObjectiveActionInputSchema),
+    async (c) => {
+      const { slug, action } = c.req.valid("param");
+      const result = await c.get("supabase").rpc("learning_objective_state", {
+        p_slug: slug,
+        p_action: action,
+        p_input: c.req.valid("json"),
+      });
+      const response = learningResult(result, learningObjectiveStateSchema);
+      return c.json(response);
+    }
+  )
+  .patch(
+    "/objectives/:slug/position",
+    description(
+      "Save a position in an enrolled objective revision",
+      learningObjectiveStateSchema
+    ),
+    writeLimit,
+    validate("param", slugParam),
+    validate("json", learningObjectivePositionSchema),
+    async (c) => {
+      const result = await c.get("supabase").rpc("learning_objective_state", {
+        p_slug: c.req.valid("param").slug,
+        p_action: "position",
+        p_input: c.req.valid("json"),
+      });
+      const response = learningResult(result, learningObjectiveStateSchema);
       return c.json(response);
     }
   );

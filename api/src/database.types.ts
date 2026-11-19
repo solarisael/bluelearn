@@ -483,17 +483,172 @@ export type Database = {
           },
         ]
       }
+      learning_enrollments: {
+        Row: {
+          completed_at: string | null
+          completed_revision_id: string | null
+          last_completed_at: string | null
+          last_resumed_at: string | null
+          objective_id: string
+          objective_revision_id: string
+          position_guide_base_id: string | null
+          started_at: string
+          target_guide_base_id: string | null
+          user_id: string
+        }
+        Insert: {
+          completed_at?: string | null
+          completed_revision_id?: string | null
+          last_completed_at?: string | null
+          last_resumed_at?: string | null
+          objective_id: string
+          objective_revision_id: string
+          position_guide_base_id?: string | null
+          started_at?: string
+          target_guide_base_id?: string | null
+          user_id: string
+        }
+        Update: {
+          completed_at?: string | null
+          completed_revision_id?: string | null
+          last_completed_at?: string | null
+          last_resumed_at?: string | null
+          objective_id?: string
+          objective_revision_id?: string
+          position_guide_base_id?: string | null
+          started_at?: string
+          target_guide_base_id?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "learning_enrollments_completed_revision_id_fkey"
+            columns: ["completed_revision_id"]
+            isOneToOne: false
+            referencedRelation: "objective_revisions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "learning_enrollments_objective_id_fkey"
+            columns: ["objective_id"]
+            isOneToOne: false
+            referencedRelation: "objectives"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "learning_enrollments_objective_revision_id_fkey"
+            columns: ["objective_revision_id"]
+            isOneToOne: false
+            referencedRelation: "objective_revisions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "learning_enrollments_position_guide_base_id_fkey"
+            columns: ["position_guide_base_id"]
+            isOneToOne: false
+            referencedRelation: "guide_bases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "learning_enrollments_position_guide_base_id_fkey"
+            columns: ["position_guide_base_id"]
+            isOneToOne: false
+            referencedRelation: "published_guides"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "learning_enrollments_target_guide_base_id_fkey"
+            columns: ["target_guide_base_id"]
+            isOneToOne: false
+            referencedRelation: "guide_bases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "learning_enrollments_target_guide_base_id_fkey"
+            columns: ["target_guide_base_id"]
+            isOneToOne: false
+            referencedRelation: "published_guides"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "learning_enrollments_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "dashboard_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "learning_enrollments_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      learning_mutation_receipts: {
+        Row: {
+          action: string
+          event_id: string
+          input: Json
+          objective_id: string
+          received_at: string
+          user_id: string
+        }
+        Insert: {
+          action: string
+          event_id: string
+          input: Json
+          objective_id: string
+          received_at?: string
+          user_id: string
+        }
+        Update: {
+          action?: string
+          event_id?: string
+          input?: Json
+          objective_id?: string
+          received_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "learning_mutation_receipts_objective_id_fkey"
+            columns: ["objective_id"]
+            isOneToOne: false
+            referencedRelation: "objectives"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "learning_mutation_receipts_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "dashboard_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "learning_mutation_receipts_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       learning_preferences: {
         Row: {
           history_paused: boolean
+          show_completed_objectives: boolean
           user_id: string
         }
         Insert: {
           history_paused?: boolean
+          show_completed_objectives?: boolean
           user_id: string
         }
         Update: {
           history_paused?: boolean
+          show_completed_objectives?: boolean
           user_id?: string
         }
         Relationships: [
@@ -1757,7 +1912,23 @@ export type Database = {
         Returns: Json
       }
       learning_lock_user: { Args: never; Returns: string }
+      learning_objective_state: {
+        Args: { p_action?: string; p_input?: Json; p_slug: string }
+        Returns: Json
+      }
+      learning_objective_view: {
+        Args: { p_objective: string; p_user: string }
+        Returns: Json
+      }
+      learning_objectives_state: {
+        Args: { p_limit?: number; p_page?: number }
+        Returns: Json
+      }
       learning_preferences_state: { Args: { p_patch?: Json }; Returns: Json }
+      learning_public_completions: {
+        Args: { p_username: string }
+        Returns: Json
+      }
       learning_read_state: {
         Args: {
           p_guide_id?: string
