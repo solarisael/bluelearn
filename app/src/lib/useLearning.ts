@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "@/lib/authContext";
 import { ApiError } from "@/lib/api/apiHelpers";
-import { getLearningPreferences } from "@/lib/api/learning";
+import { getLearningPreferences, getLearningReads } from "@/lib/api/learning";
 
 export function learningErrorCategory(error: unknown) {
   if (!(error instanceof ApiError)) return "network" as const;
@@ -19,17 +19,18 @@ export function learningErrorMessage(error: unknown) {
     : "Could not save learning state.";
 }
 
-function refreshLearning() {
+export function refreshLearning() {
   window.dispatchEvent(new Event("bluelearn:learning-changed"));
 }
 
 export function useLearningResource<T>(
-  resource: string,
-  load: (signal: AbortSignal) => Promise<T>
+  resource: string | null,
+  load: (signal: AbortSignal) => Promise<T>,
+  isPrivate = true
 ) {
   const { user, loading: authLoading } = useAuth();
-  const owner = user?.id;
-  const key = !authLoading && owner ? `${owner}:${resource}` : null;
+  const owner = isPrivate ? user?.id : "public";
+  const key = !authLoading && owner && resource ? `${owner}:${resource}` : null;
   const [version, setVersion] = useState(0);
   const [result, setResult] = useState<{
     key: string;
@@ -82,6 +83,7 @@ export function useLearningResource<T>(
     data: current?.data,
     error: current?.error,
     loading: authLoading || Boolean(key && (!current || current.loading)),
+    signedIn: !authLoading && Boolean(user),
     refresh,
   };
 }
@@ -94,9 +96,19 @@ export function useLearningPreferences() {
   return useLearningResource("preferences", load);
 }
 
-export function useLearningMutation() {
+export function useLearningReads(guideIds: Array<string>) {
+  const ids = [...new Set(guideIds)].sort().join(",");
+  const load = useCallback(
+    (signal: AbortSignal) =>
+      getLearningReads(ids ? ids.split(",") : [], { signal }),
+    [ids]
+  );
+  return useLearningResource(ids ? `reads:${ids}` : null, load);
+}
+
+export function useLearningMutation(scope = "") {
   const { user, loading } = useAuth();
-  const owner = !loading && user ? user.id : undefined;
+  const owner = !loading && user ? `${user.id}:${scope}` : undefined;
   const currentOwner = useRef(owner);
   currentOwner.current = owner;
   const inFlight = useRef<{ owner: string } | null>(null);
@@ -155,6 +167,7 @@ export function useLearningMutation() {
 
   return {
     run,
+    isCurrent: () => Boolean(owner && currentOwner.current === owner),
     pending: Boolean(result && result.owner === owner && result.pending),
     error: result && result.owner === owner ? result.error : undefined,
   };

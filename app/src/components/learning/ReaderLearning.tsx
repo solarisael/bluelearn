@@ -1,9 +1,19 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useLocation, useRouterState } from "@tanstack/react-router";
+import {
+  Link,
+  useLocation,
+  useRouter,
+  useRouterState,
+} from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/authContext";
-import { recordLearningVisit } from "@/lib/api/learning";
-import { learningErrorCategory, learningErrorMessage } from "@/lib/useLearning";
+import { recordLearningVisit, setLearningRead } from "@/lib/api/learning";
+import {
+  learningErrorCategory,
+  learningErrorMessage,
+  useLearningMutation,
+  useLearningReads,
+} from "@/lib/useLearning";
 import { analyticsSource, newAnalyticsEventId } from "@/lib/telemetry";
 
 export type DisplayedGuide = {
@@ -153,15 +163,75 @@ export function LearningFailure({
 }
 
 export function ReaderLearning({ guide }: { guide: DisplayedGuide }) {
+  const router = useRouter();
+  const reads = useLearningReads([guide.guideId]);
+  const mutation = useLearningMutation(`${guide.guideId}:${guide.revisionId}`);
+  const read = reads.data?.reads.find(
+    (item) => item.guide_id === guide.guideId
+  );
   const visit = useReaderOpen(guide);
-
-  if (!visit.error) return null;
 
   return (
     <section
       aria-label="Your learning"
       className="my-6 space-y-4 rounded-lg border p-4"
     >
+      {reads.signedIn ? (
+        <>
+          <Button
+            variant="outline"
+            size="lg"
+            className="btn-sec"
+            disabled={
+              reads.loading ||
+              Boolean(reads.error) ||
+              mutation.pending ||
+              learningErrorCategory(mutation.error) === "conflict"
+            }
+            aria-pressed={Boolean(read)}
+            onClick={() =>
+              void mutation.run(() =>
+                setLearningRead(guide.guideId, {
+                  revision_id: guide.revisionId,
+                  read: !read,
+                })
+              )
+            }
+          >
+            {mutation.pending
+              ? "Saving..."
+              : read
+                ? "Mark as unread"
+                : "Mark as read"}
+          </Button>
+          {read?.has_newer_revision && (
+            <p className="text-sm text-muted-foreground">
+              New version available.
+            </p>
+          )}
+          <LearningFailure error={reads.error} refresh={reads.refresh} />
+          <LearningFailure
+            error={mutation.error}
+            refresh={
+              learningErrorCategory(mutation.error) === "conflict"
+                ? () => {
+                    void router.invalidate();
+                    reads.refresh();
+                  }
+                : undefined
+            }
+          />
+        </>
+      ) : !reads.loading ? (
+        <p className="text-sm text-muted-foreground">
+          <Link to="/login" className="underline">
+            Sign in
+          </Link>{" "}
+          to save your progress.
+        </p>
+      ) : (
+        <p className="text-sm text-muted-foreground">Loading...</p>
+      )}
       <LearningFailure
         error={visit.error}
         refresh={
@@ -170,7 +240,7 @@ export function ReaderLearning({ guide }: { guide: DisplayedGuide }) {
             : undefined
         }
       />
-      {learningErrorCategory(visit.error) !== "conflict" && (
+      {visit.error && learningErrorCategory(visit.error) !== "conflict" && (
         <Button
           variant="outline"
           size="lg"

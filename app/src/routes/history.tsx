@@ -54,7 +54,12 @@ function HistoryPage() {
           className="btn-danger"
           disabled={!data?.total || mutation.pending || history.loading}
           onClick={() => {
-            if (!window.confirm("Clear all reading history?")) return;
+            if (
+              !window.confirm(
+                "Clear all reading history? Read marks stay saved."
+              )
+            )
+              return;
 
             void mutation.run(async () => {
               await clearLearningHistory();
@@ -71,7 +76,7 @@ function HistoryPage() {
       </div>
       {data?.paused && (
         <p role="status" className="text-sm">
-          History paused.
+          History paused. Progress still saves.
         </p>
       )}
       <LearningFailure error={history.error} refresh={history.refresh} />
